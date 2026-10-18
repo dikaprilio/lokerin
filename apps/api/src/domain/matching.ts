@@ -57,7 +57,13 @@ export async function cariLowongan(db: Db, models: Models, userId: string | null
   const queryText = [input.kueri, persona ? `${persona.title}. ${persona.summary}. ${persona.skills.join(", ")}` : ""]
     .filter(Boolean)
     .join("\n");
-  const vector = queryText ? await models.embed(queryText) : null;
+  // Tanpa embedding (misalnya kunci API bermasalah), pencarian turun ke pencocokan kata dan urutan terbaru.
+  const vector = queryText ? await models.embed(queryText).catch(() => null) : null;
+  if (!vector && input.kueri) {
+    const words = [...tokens(input.kueri)].slice(0, 6);
+    const kata = or(...words.flatMap((word) => [ilike(lowongan.title, `%${word}%`), ilike(lowongan.description, `%${word}%`)]));
+    if (kata) filters.push(kata);
+  }
   const distance = vector
     ? sql<number>`${lowongan.embedding} <=> ${JSON.stringify(vector)}::vector`
     : sql<number>`0`;
@@ -140,7 +146,10 @@ export async function embedLowongan(db: Db, models: Models, ids: string[]) {
       .filter(Boolean)
       .join("\n"),
   );
-  const vectors = await models.embedMany(texts);
+  const vectors = await models.embedMany(texts).catch((error: unknown) => {
+    console.warn("Embedding Lowongan gagal; jalankan `pnpm db:embed` setelah kunci API diperbaiki.", String(error).slice(0, 120));
+    return [] as number[][];
+  });
   await Promise.all(
     rows.map((row, index) => {
       const embedding = vectors[index];

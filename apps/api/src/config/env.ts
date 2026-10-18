@@ -24,7 +24,9 @@ const schema = z.object({
   OPENROUTER_MODEL: z.string().default("deepseek/deepseek-v4.1-flash-1017"),
   OPENROUTER_FALLBACK_MODEL: z.string().default("deepseek/deepseek-v4.1-flash"),
   OPENROUTER_PROVIDERS: csv("cloudflare,deepinfra,inference-net"),
-  OPENAI_API_KEY: z.string().min(1),
+  /** Hanya wajib untuk panggilan suara gpt-live-1 (dan embedding bila EMBEDDING_PROVIDER=openai). */
+  OPENAI_API_KEY: z.string().optional(),
+  EMBEDDING_PROVIDER: z.enum(["openrouter", "openai"]).default("openrouter"),
   OPENAI_EMBEDDING_MODEL: z.string().default("text-embedding-3-small"),
   OPENAI_LIVE_MODEL: z.string().default("gpt-live-1"),
   OPENAI_LIVE_VOICE: z.string().default("cedar"),

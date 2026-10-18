@@ -92,9 +92,9 @@ export async function simpanPersona(db: Db, models: Models, userId: string, isi:
       .where(and(eq(fakta.userId, userId), inArray(fakta.id, isi.fakta_ids), eq(fakta.status, "terkonfirmasi")));
     isi.fakta_ids = owned.map((row) => row.id);
   }
-  const embedding = await models.embed(
-    `${isi.judul}. ${isi.ringkasan ?? ""}. Keahlian: ${(isi.keahlian ?? []).join(", ")}`,
-  );
+  const embedding = await models
+    .embed(`${isi.judul}. ${isi.ringkasan ?? ""}. Keahlian: ${(isi.keahlian ?? []).join(", ")}`)
+    .catch(() => null);
   const values = {
     title: isi.judul,
     summary: isi.ringkasan ?? "",

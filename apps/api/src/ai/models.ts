@@ -13,7 +13,7 @@ export type Models = ReturnType<typeof createModels>;
  */
 export function createModels(env: Env) {
   const openrouter = createOpenRouter({ apiKey: env.OPENROUTER_API_KEY, appName: "Lokerin" });
-  const openai = createOpenAI({ apiKey: env.OPENAI_API_KEY });
+  const openai = env.OPENAI_API_KEY ? createOpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
   const providers = Array.from(new Set([...env.OPENROUTER_PROVIDERS, "together", "nebius"]));
 
   const chat = (effort: "low" | "none" = "low") =>
@@ -25,7 +25,11 @@ export function createModels(env: Env) {
       },
     });
 
-  const embeddingModel = openai.embedding(env.OPENAI_EMBEDDING_MODEL);
+  // Model embedding yang sama (text-embedding-3-small, 1536 dimensi) bisa lewat OpenRouter atau OpenAI.
+  const embeddingModel =
+    env.EMBEDDING_PROVIDER === "openai" && openai
+      ? openai.embedding(env.OPENAI_EMBEDDING_MODEL)
+      : openrouter.textEmbeddingModel(`openai/${env.OPENAI_EMBEDDING_MODEL}`);
 
   return {
     chat,

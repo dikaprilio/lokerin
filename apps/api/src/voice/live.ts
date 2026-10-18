@@ -51,7 +51,7 @@ export class LiveVoice {
     private bus: EventBus,
     private log: FastifyBaseLogger,
   ) {
-    this.client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+    this.client = new OpenAI({ apiKey: env.OPENAI_API_KEY ?? "belum-diatur" });
   }
 
   get activeCount() {
@@ -59,6 +59,9 @@ export class LiveVoice {
   }
 
   async open(user: SessionUser, sdp: string, threadId: string) {
+    if (!this.env.OPENAI_API_KEY) {
+      throw new HttpError(503, "suara_belum_aktif", "Panggilan suara belum aktif. Pakai obrolan teks dulu.");
+    }
     for (const call of this.calls.values()) {
       if (call.user.id === user.id) await this.close(user, call.id);
     }
