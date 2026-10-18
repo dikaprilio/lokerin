@@ -1,0 +1,9 @@
+{
+  "name": "lokerin",
+  "private": true,
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "dev:api": "pnpm --filter @lokerin/api dev",
+    "typecheck": "pnpm -r typecheck"
+  }
+}
