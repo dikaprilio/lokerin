@@ -185,7 +185,9 @@ try {
       .returning({ id: fakta.id });
     for (const persona of item.personas) {
       const faktaIds = persona.fakta_index.map((i) => faktaRows[i]?.id).filter((id): id is string => Boolean(id));
-      const embedding = await models.embed(`${persona.title}. ${persona.summary}. Keahlian: ${persona.skills.join(", ")}`);
+      const embedding = await models
+        .embed(`${persona.title}. ${persona.summary}. Keahlian: ${persona.skills.join(", ")}`)
+        .catch(() => null);
       await db.insert(personas).values({
         userId: user.id,
         title: persona.title,
