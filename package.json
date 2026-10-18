@@ -1,0 +1,46 @@
+{
+  "name": "lokerin-backend",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/server.ts",
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/seed/data','dist/seed/data',{recursive:true})\"",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file=.env src/db/migrate.ts",
+    "db:seed": "tsx --env-file=.env src/seed/index.ts",
+    "db:embed": "tsx --env-file=.env src/seed/embed.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^4.0.96",
+    "@fastify/cookie": "^11.1.3",
+    "@fastify/cors": "^11.3.1",
+    "@fastify/rate-limit": "^11.2.1",
+    "@mastra/ai-sdk": "^1.11.1",
+    "@mastra/core": "^1.78.0",
+    "@mastra/memory": "^1.38.0",
+    "@mastra/pg": "^1.31.2",
+    "@openrouter/ai-sdk-provider": "^3.1.0",
+    "ai": "^7.0.143",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.7",
+    "openai": "^7.36.0",
+    "pg": "^8.23.1",
+    "playwright-core": "^1.64.1",
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "@types/ws": "^8.18.2",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

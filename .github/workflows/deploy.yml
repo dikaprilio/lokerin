@@ -1,0 +1,54 @@
+name: Deploy backend ke Azure
+
+# Membangun image backend, mendorongnya ke Azure Container Registry, lalu
+# memperbarui Azure App Service. Jangan menjalankan workflow ini saat penjurian:
+# restart memutus panggilan suara yang sedang berjalan.
+on:
+  push:
+    branches: [main]
+    paths: ["src/**", "drizzle/**", "package.json", "pnpm-lock.yaml", "Dockerfile", ".github/workflows/deploy.yml"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build dan push image ke ACR
+        run: |
+          az acr login --name "${{ vars.ACR_NAME }}"
+          IMAGE="${{ vars.ACR_NAME }}.azurecr.io/lokerin-backend:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy ke App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          images: ${{ env.IMAGE }}
+
+      - name: Cek /healthz
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS "https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net/healthz"; then exit 0; fi
+            sleep 10
+          done
+          exit 1

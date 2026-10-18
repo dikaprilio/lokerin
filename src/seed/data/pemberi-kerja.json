@@ -1,0 +1,242 @@
+[
+  {
+    "key": "bu-wati",
+    "owner_name": "Wati Suryani",
+    "business_name": "Warung Makan Bu Wati",
+    "kind": "umkm",
+    "city": "Purwokerto",
+    "district": "Purwokerto Utara",
+    "address": "Jl. Kampus Gg. Melati No. 7, Grendeng",
+    "lat": -7.4041,
+    "lng": 109.2493,
+    "phone": "0812-0000-1101",
+    "description": "Warung makan rumahan dekat kampus di Grendeng, buka sejak 2012. Menu andalan nasi rames, sayur lodeh, dan mendoan anget. Paling ramai jam makan siang mahasiswa, juga terima pesanan nasi kotak.",
+    "checks": {
+      "ktp": true,
+      "npwp": false,
+      "foto_usaha": true
+    },
+    "status": "terverifikasi",
+    "verified_at": "2026-10-12T02:30:00Z"
+  },
+  {
+    "key": "belum-verif",
+    "owner_name": "Teguh Santoso",
+    "business_name": "Laundry Resik Kilat",
+    "kind": "umkm",
+    "city": "Purwokerto",
+    "district": "Purwokerto Selatan",
+    "address": "Jl. Gerilya Gg. Kenanga No. 21, Karangpucung",
+    "lat": -7.4452,
+    "lng": 109.2361,
+    "phone": "0812-0000-1102",
+    "description": "Laundry kiloan & satuan, bisa antar-jemput cucian di sekitar Karangpucung dan Teluk. Baru buka sekitar 4 bulan.",
+    "checks": {
+      "ktp": false,
+      "npwp": false,
+      "foto_usaha": false
+    },
+    "status": "belum",
+    "verified_at": null
+  },
+  {
+    "key": "las-tirta-baja",
+    "owner_name": "Slamet Purwanto",
+    "business_name": "Bengkel Las Tirta Baja",
+    "kind": "umkm",
+    "city": "Banyumas",
+    "district": "Sokaraja",
+    "address": "Jl. Raya Sokaraja–Banyumas No. 88, Sokaraja Kidul",
+    "lat": -7.4602,
+    "lng": 109.2893,
+    "phone": "0812-0000-1103",
+    "description": "Bengkel las pagar, teralis, kanopi, pintu besi, dan konstruksi besi ringan. Berdiri sejak 2009, sekarang ada 6 tukang tetap dan sering ambil proyek sampai Purbalingga.",
+    "checks": {
+      "ktp": true,
+      "npwp": true,
+      "foto_usaha": true
+    },
+    "status": "terverifikasi",
+    "verified_at": "2026-10-10T04:00:00Z"
+  },
+  {
+    "key": "griya-kokoh",
+    "owner_name": "Sutrisno Hadi",
+    "business_name": "Griya Kokoh Renovasi",
+    "kind": "umkm",
+    "city": "Banyumas",
+    "district": "Kembaran",
+    "address": "Jl. Raya Kembaran No. 45, Kembaran",
+    "lat": -7.4192,
+    "lng": 109.2861,
+    "phone": "0812-0000-1104",
+    "description": "Jasa bangun & renovasi rumah, pagar, kanopi, dan gudang untuk area Banyumas, Purbalingga, dan Cilacap. Biasanya pegang 3–5 proyek sekaligus.",
+    "checks": {
+      "ktp": true,
+      "npwp": true,
+      "foto_usaha": true
+    },
+    "status": "terverifikasi",
+    "verified_at": "2026-10-11T06:20:00Z"
+  },
+  {
+    "key": "mitra-serayu",
+    "owner_name": "Bambang Wicaksono",
+    "business_name": "Ekspedisi Mitra Serayu",
+    "kind": "umkm",
+    "city": "Purwokerto",
+    "district": "Purwokerto Barat",
+    "address": "Jl. Pasirmuncang Raya No. 17, Pasirmuncang",
+    "lat": -7.4318,
+    "lng": 109.2172,
+    "phone": "0812-0000-1105",
+    "description": "Jasa kirim paket same-day dan barang antarkota di Banyumas raya. Hub utama di Pasirmuncang, ada hub kecil di Purbalingga dan gudang transit di Kroya.",
+    "checks": {
+      "ktp": true,
+      "npwp": true,
+      "foto_usaha": true
+    },
+    "status": "terverifikasi",
+    "verified_at": "2026-10-13T01:45:00Z"
+  },
+  {
+    "key": "sari-rejeki",
+    "owner_name": "Siti Maesaroh",
+    "business_name": "Toko Grosir Sari Rejeki",
+    "kind": "umkm",
+    "city": "Banyumas",
+    "district": "Ajibarang",
+    "address": "Jl. Raya Ajibarang No. 102, Ajibarang Wetan",
+    "lat": -7.4093,
+    "lng": 109.0838,
+    "phone": "0812-0000-1106",
+    "description": "Grosir sembako & kebutuhan warung sejak 2005. Toko utama di Ajibarang, cabang kecil di Wangon, langganan warung sampai Pekuncen.",
+    "checks": {
+      "ktp": true,
+      "npwp": true,
+      "foto_usaha": true
+    },
+    "status": "terverifikasi",
+    "verified_at": "2026-10-14T03:10:00Z"
+  },
+  {
+    "key": "lereng-slamet",
+    "owner_name": "Wahyudi Saputro",
+    "business_name": "Kebun & Warung Lereng Slamet",
+    "kind": "umkm",
+    "city": "Banyumas",
+    "district": "Baturraden",
+    "address": "Jl. Raya Baturraden, Desa Karangsalam",
+    "lat": -7.3405,
+    "lng": 109.2349,
+    "phone": "0812-0000-1107",
+    "description": "Kebun sayur di lereng Slamet plus warung makan untuk wisatawan di jalur Baturraden. Punya rumah produksi kripik sayur & tempe di Kecamatan Banyumas dan kebun bibit di Patikraja.",
+    "checks": {
+      "ktp": true,
+      "npwp": false,
+      "foto_usaha": true
+    },
+    "status": "terverifikasi",
+    "verified_at": "2026-10-15T05:00:00Z"
+  },
+  {
+    "key": "rt-hendra",
+    "owner_name": "Hendra Wibisono",
+    "business_name": "Keluarga Bapak Hendra",
+    "kind": "rumah_tangga",
+    "city": "Purwokerto",
+    "district": "Purwokerto Selatan",
+    "address": "Kel. Berkoh, Purwokerto Selatan (alamat lengkap dibagikan setelah lamaran diterima)",
+    "lat": -7.4421,
+    "lng": 109.2534,
+    "phone": "0812-0000-1108",
+    "description": "Keluarga dengan 2 anak usia SD dan SMP. Suami-istri kerja kantoran, butuh bantuan rumah dan antar-jemput anak.",
+    "checks": {
+      "ktp": true,
+      "npwp": false,
+      "foto_usaha": false
+    },
+    "status": "terverifikasi",
+    "verified_at": "2026-10-16T08:00:00Z"
+  },
+  {
+    "key": "rt-ratna",
+    "owner_name": "Ratna Puspitasari",
+    "business_name": "Keluarga Ibu Ratna",
+    "kind": "rumah_tangga",
+    "city": "Purwokerto",
+    "district": "Purwokerto Timur",
+    "address": "Kel. Arcawinangun, Purwokerto Timur (alamat lengkap dibagikan setelah lamaran diterima)",
+    "lat": -7.4172,
+    "lng": 109.2603,
+    "phone": "0812-0000-1109",
+    "description": "Keluarga yang merawat ibu lansia di rumah. Butuh bantuan siang hari selama anggota keluarga kerja, plus bersih-bersih rumah tiap Sabtu.",
+    "checks": {
+      "ktp": true,
+      "npwp": false,
+      "foto_usaha": false
+    },
+    "status": "terverifikasi",
+    "verified_at": "2026-10-16T09:30:00Z"
+  },
+  {
+    "key": "teraskode",
+    "owner_name": "Andika Prasetya",
+    "business_name": "Teraskode Studio",
+    "kind": "perusahaan",
+    "city": "Purwokerto",
+    "district": "Purwokerto Utara",
+    "address": "Jl. HR Bunyamin Gg. Flamboyan No. 3, Pabuaran",
+    "lat": -7.3998,
+    "lng": 109.2421,
+    "phone": "0812-0000-1110",
+    "description": "Software house kecil (9 orang) yang bikin aplikasi web & mobile untuk klien lokal dan luar negeri. Remote-friendly: tim boleh hybrid atau full remote, kantor kecil di Purwokerto Utara.",
+    "checks": {
+      "ktp": true,
+      "npwp": true,
+      "foto_usaha": false
+    },
+    "status": "terverifikasi",
+    "verified_at": "2026-10-10T07:00:00Z"
+  },
+  {
+    "key": "gemawang",
+    "owner_name": "Nadia Rahmawati",
+    "business_name": "Gemawang Kreatif",
+    "kind": "perusahaan",
+    "city": "Purwokerto",
+    "district": "Purwokerto Timur",
+    "address": "Jl. Pemuda Gg. Cempaka No. 5, Kranji",
+    "lat": -7.4213,
+    "lng": 109.2479,
+    "phone": "0812-0000-1111",
+    "description": "Agensi kreatif kecil: kelola media sosial, desain, konten, dan iklan digital untuk UMKM, kafe, dan tempat wisata di Banyumas raya.",
+    "checks": {
+      "ktp": true,
+      "npwp": true,
+      "foto_usaha": false
+    },
+    "status": "terverifikasi",
+    "verified_at": "2026-10-11T02:00:00Z"
+  },
+  {
+    "key": "pawon-digital",
+    "owner_name": "Fajar Nugroho",
+    "business_name": "Pawon Digital",
+    "kind": "perusahaan",
+    "city": "Purwokerto",
+    "district": "Purwokerto Barat",
+    "address": "Jl. Kober Gg. Mawar No. 11, Kober",
+    "lat": -7.4198,
+    "lng": 109.2287,
+    "phone": "0812-0000-1112",
+    "description": "Studio digitalisasi UMKM: bikin katalog online, foto produk, toko marketplace, dan aplikasi kasir sederhana untuk warung & toko di Banyumas.",
+    "checks": {
+      "ktp": true,
+      "npwp": true,
+      "foto_usaha": false
+    },
+    "status": "terverifikasi",
+    "verified_at": "2026-10-14T06:45:00Z"
+  }
+]

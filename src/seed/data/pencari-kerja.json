@@ -1,0 +1,283 @@
+[
+  {
+    "key": "pak-darto",
+    "name": "Darto",
+    "city": "Purwokerto",
+    "district": "Purwokerto Timur",
+    "phone": "0812-0000-2201",
+    "email": "darto.demo@example.com",
+    "birth_year": 1988,
+    "education": "SMK Teknik Mesin",
+    "fakta": [
+      {
+        "kind": "pengalaman",
+        "title": "Tukang las di bengkel las",
+        "detail": "Las listrik & karbit untuk pagar, teralis, kanopi, dan pintu besi. Biasa ukur sendiri, potong, rakit, sampai pasang di rumah pelanggan.",
+        "place": "Bengkel las di Sokaraja",
+        "period": "2018–2024 (6 tahun)"
+      },
+      {
+        "kind": "pengalaman",
+        "title": "Proyek kanopi & pagar rumah (lepas/borongan)",
+        "detail": "Garap sekitar 30 kanopi besi hollow & baja ringan dan pagar rumah bareng tim 2–3 orang, dari ukur sampai finishing cat.",
+        "place": "Purwokerto, Sokaraja, Kembaran",
+        "period": "2024–sekarang"
+      },
+      {
+        "kind": "pengalaman",
+        "title": "Driver ojek online (malam)",
+        "detail": "Antar penumpang, makanan, dan paket, biasanya jam 18.00–23.00. Hafal jalan Purwokerto–Sokaraja–Baturraden.",
+        "place": "Purwokerto",
+        "period": "2022–sekarang (4 tahun)"
+      },
+      {
+        "kind": "keahlian",
+        "title": "SIM C aktif",
+        "detail": "SIM C masih berlaku, belum pernah kena tilang berat.",
+        "place": "",
+        "period": "berlaku s.d. 2028"
+      },
+      {
+        "kind": "lainnya",
+        "title": "Punya motor sendiri",
+        "detail": "Motor bebek 125 cc, surat lengkap, kuat buat antar barang dan bawa alat las kecil.",
+        "place": "",
+        "period": ""
+      },
+      {
+        "kind": "pendidikan",
+        "title": "SMK Teknik Mesin",
+        "detail": "Jurusan Teknik Pemesinan. Praktik bubut, las dasar, dan gambar teknik.",
+        "place": "SMK di Purwokerto",
+        "period": "2003–2006"
+      },
+      {
+        "kind": "keahlian",
+        "title": "Las listrik (SMAW), gerinda, dan potong besi",
+        "detail": "Pakai mesin las inverter, gerinda tangan, dan mesin potong. Paham K3 dasar: kacamata/topeng las, sarung tangan, cek kabel sebelum kerja.",
+        "place": "",
+        "period": ""
+      },
+      {
+        "kind": "prestasi",
+        "title": "Rating driver 4,9 dari 5",
+        "detail": "Lebih dari 5.000 perjalanan selesai, banyak pelanggan langganan antar paket.",
+        "place": "Aplikasi ojek online",
+        "period": "2022–sekarang"
+      }
+    ],
+    "personas": [
+      {
+        "title": "Tukang Las",
+        "summary": "Tukang las listrik dengan pengalaman 6 tahun di bengkel las dan 2 tahun ambil proyek sendiri. Biasa garap pagar, teralis, dan kanopi dari ukur sampai pasang. Rapi, paham K3 dasar, siap kerja harian atau kontrak proyek.",
+        "skills": [
+          "Las listrik (SMAW)",
+          "Las karbit",
+          "Pasang kanopi",
+          "Pagar & teralis",
+          "Gerinda & potong besi",
+          "Baca gambar kerja sederhana"
+        ],
+        "fakta_index": [
+          0,
+          1,
+          5,
+          6
+        ],
+        "preferensi": {
+          "kota": [
+            "Purwokerto",
+            "Banyumas"
+          ],
+          "upah_min": 130000,
+          "upah_satuan": "harian",
+          "mulai": "2026-10-20",
+          "jenis_kerja": [
+            "harian",
+            "kontrak"
+          ],
+          "mau_pindah": false
+        }
+      },
+      {
+        "title": "Driver Ojol",
+        "summary": "Driver ojol 4 tahun, biasa narik sore sampai malam. Hafal jalan Purwokerto dan sekitarnya, punya motor sendiri dan SIM C aktif, rating 4,9. Cocok untuk kurir paket atau antar barang shift sore–malam.",
+        "skills": [
+          "Antar penumpang & paket",
+          "Hafal rute Purwokerto–Sokaraja–Baturraden",
+          "Pakai aplikasi peta",
+          "Motor sendiri",
+          "Ramah pelanggan"
+        ],
+        "fakta_index": [
+          2,
+          3,
+          4,
+          7
+        ],
+        "preferensi": {
+          "kota": [
+            "Purwokerto",
+            "Banyumas"
+          ],
+          "upah_min": 70000,
+          "upah_satuan": "harian",
+          "mulai": "2026-10-20",
+          "jenis_kerja": [
+            "paruh_waktu",
+            "harian"
+          ],
+          "mau_pindah": false
+        }
+      }
+    ]
+  },
+  {
+    "key": "raka",
+    "name": "Raka Aditya",
+    "city": "Purwokerto",
+    "district": "Purwokerto Utara",
+    "phone": "0812-0000-2202",
+    "email": "raka.demo@example.com",
+    "birth_year": 2006,
+    "education": "S1 Informatika (semester 4)",
+    "fakta": [
+      {
+        "kind": "pendidikan",
+        "title": "S1 Informatika",
+        "detail": "Semester 4, IPK 3,62. Mata kuliah favorit: Interaksi Manusia dan Komputer, Pemrograman Web.",
+        "place": "Kampus di Purwokerto",
+        "period": "2024–sekarang"
+      },
+      {
+        "kind": "prestasi",
+        "title": "Finalis lomba UI/UX tingkat nasional",
+        "detail": "Tim 3 orang, desain aplikasi antrean puskesmas. Masuk 10 besar dari 150+ tim, Raka pegang riset pengguna dan prototipe.",
+        "place": "Lomba desain antarkampus (daring)",
+        "period": "2025"
+      },
+      {
+        "kind": "pengalaman",
+        "title": "Redesign aplikasi kantin kampus (Figma)",
+        "detail": "Wawancara 12 mahasiswa, bikin user flow, wireframe, prototipe interaktif, lalu uji usability sederhana. Waktu pesan turun dari 6 langkah jadi 3.",
+        "place": "Proyek mata kuliah",
+        "period": "2025"
+      },
+      {
+        "kind": "pengalaman",
+        "title": "Desain landing page untuk 2 UMKM teman",
+        "detail": "Desain website toko kue dan usaha sablon di Figma, lengkap dengan komponen dan style guide sederhana. Satu sudah tayang.",
+        "place": "Freelance",
+        "period": "2025–2026"
+      },
+      {
+        "kind": "keahlian",
+        "title": "Figma",
+        "detail": "Auto layout, components & variants, prototyping, dan dasar design system.",
+        "place": "",
+        "period": ""
+      },
+      {
+        "kind": "keahlian",
+        "title": "HTML, CSS, JavaScript dasar",
+        "detail": "Bisa bikin halaman responsif dengan Flexbox/Grid, paham DOM dan fetch API dasar.",
+        "place": "",
+        "period": ""
+      },
+      {
+        "kind": "keahlian",
+        "title": "React dasar",
+        "detail": "Bikin to-do app dan katalog produk pakai React + Vite: komponen, props, state, useEffect. Kode di GitHub.",
+        "place": "",
+        "period": "2026"
+      },
+      {
+        "kind": "pengalaman",
+        "title": "Kepala Divisi Kreatif himpunan mahasiswa",
+        "detail": "Koordinasi 8 anggota untuk poster, feed Instagram, dan dokumentasi acara himpunan Informatika.",
+        "place": "Himpunan Mahasiswa Informatika",
+        "period": "2025–2026"
+      },
+      {
+        "kind": "lainnya",
+        "title": "Panitia hackathon kampus (divisi acara)",
+        "detail": "Bantu susun rundown, briefing juri, dan bikin halaman pendaftaran sederhana.",
+        "place": "Kampus di Purwokerto",
+        "period": "2025"
+      },
+      {
+        "kind": "pengalaman",
+        "title": "Kerja paruh waktu di warung makan",
+        "detail": "Jaga kasir dan antar pesanan sore hari. Terbiasa melayani pelanggan dan pegang uang dengan teliti.",
+        "place": "Warung makan dekat kampus",
+        "period": "2024–2025"
+      }
+    ],
+    "personas": [
+      {
+        "title": "Desainer UI/UX",
+        "summary": "Mahasiswa Informatika semester 4, finalis lomba UI/UX nasional. Terbiasa riset pengguna, bikin wireframe sampai prototipe interaktif di Figma, dan menguji desain langsung ke pengguna. Cari magang UI/UX di Purwokerto atau hybrid.",
+        "skills": [
+          "Figma",
+          "Wireframe & prototipe",
+          "Riset pengguna",
+          "Usability testing",
+          "Design system dasar",
+          "Desain grafis untuk media sosial"
+        ],
+        "fakta_index": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          7
+        ],
+        "preferensi": {
+          "kota": [
+            "Purwokerto"
+          ],
+          "upah_min": 1000000,
+          "upah_satuan": "bulanan",
+          "mulai": "2026-10-20",
+          "jenis_kerja": [
+            "magang",
+            "paruh_waktu"
+          ],
+          "mau_pindah": false
+        }
+      },
+      {
+        "title": "Frontend Developer (magang)",
+        "summary": "Mahasiswa Informatika yang bisa ubah desain jadi halaman web responsif. Paham HTML, CSS, JavaScript, dan React dasar, plus ngerti sisi desain karena biasa pakai Figma. Cari magang frontend, boleh remote atau paruh waktu.",
+        "skills": [
+          "HTML",
+          "CSS (Flexbox/Grid)",
+          "JavaScript",
+          "React dasar",
+          "Git & GitHub dasar",
+          "Figma ke kode"
+        ],
+        "fakta_index": [
+          0,
+          3,
+          5,
+          6,
+          8
+        ],
+        "preferensi": {
+          "kota": [
+            "Purwokerto"
+          ],
+          "upah_min": 800000,
+          "upah_satuan": "bulanan",
+          "mulai": "2026-10-20",
+          "jenis_kerja": [
+            "magang"
+          ],
+          "mau_pindah": false
+        }
+      }
+    ]
+  }
+]
