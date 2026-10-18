@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { AppContext } from "../context.js";
 import { employers, users } from "../db/schema.js";
 import { HttpError, SESSION_COOKIE, issueToken, requireUser, setSessionCookie } from "../auth/session.js";
+import { dataSaya } from "../domain/pengguna.js";
 import { kartuPemberiKerja } from "../domain/serialize.js";
 import { parse } from "./util.js";
 
@@ -47,19 +48,5 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext) {
     return { ok: true };
   });
 
-  app.get("/me", async (request) => {
-    const session = requireUser(request);
-    const user = await ctx.db.query.users.findFirst({ where: eq(users.id, session.id) });
-    if (!user) throw new HttpError(401, "belum_masuk", "Akun tidak ditemukan; masuk ulang.");
-    const employer =
-      user.role === "pemberi" ? await ctx.db.query.employers.findFirst({ where: eq(employers.userId, user.id) }) : null;
-    return {
-      id: user.id,
-      peran: user.role,
-      nama: user.name,
-      kota: user.city,
-      kecamatan: user.district,
-      pemberi_kerja: employer ? kartuPemberiKerja(employer) : null,
-    };
-  });
+  app.get("/me", async (request) => dataSaya(ctx.db, requireUser(request).id));
 }

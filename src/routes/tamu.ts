@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AppContext } from "../context.js";
 import { issueToken, requireUser, setSessionCookie } from "../auth/session.js";
-import { buatTamu, daftarPemberiKerja } from "../domain/pengguna.js";
+import { buatTamu, daftarPemberiKerja, ubahPengguna } from "../domain/pengguna.js";
 import { parse } from "./util.js";
 
 const teks = (max: number) => z.string().trim().min(1).max(max);
@@ -24,6 +24,11 @@ const pemberiKerjaSchema = z.object({
   lng: z.number().min(-180).max(180).optional(),
   dokumen: z.object({ ktp: z.boolean(), npwp: z.boolean(), foto_usaha: z.boolean() }),
 });
+
+const ubahSayaSchema = z
+  .object({ nama: teks(80), kota: teks(80), kecamatan: teks(80).nullable() })
+  .partial()
+  .refine((isi) => Object.keys(isi).length > 0);
 
 /** Akun baru dari onboarding frontend, terpisah dari akun demo satu ketuk. */
 export async function tamuRoutes(app: FastifyInstance, ctx: AppContext) {
@@ -48,5 +53,10 @@ export async function tamuRoutes(app: FastifyInstance, ctx: AppContext) {
     const employer = await daftarPemberiKerja(db, user.id, parse(pemberiKerjaSchema, request.body));
     reply.code(201);
     return employer;
+  });
+
+  app.patch("/me", async (request) => {
+    const user = requireUser(request);
+    return ubahPengguna(db, user.id, parse(ubahSayaSchema, request.body));
   });
 }
