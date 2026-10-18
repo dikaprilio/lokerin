@@ -12,6 +12,7 @@ import { LiveVoice } from "./voice/live.js";
 import { closeBrowser } from "./cv/pdf.js";
 import type { AppContext } from "./context.js";
 import { authRoutes } from "./routes/auth.js";
+import { tamuRoutes } from "./routes/tamu.js";
 import { lowonganRoutes } from "./routes/lowongan.js";
 import { profilRoutes } from "./routes/profil.js";
 import { lamaranRoutes } from "./routes/lamaran.js";
@@ -80,6 +81,7 @@ export async function buildApp(env: Env) {
   });
 
   await authRoutes(app, ctx);
+  await tamuRoutes(app, ctx);
   await lowonganRoutes(app, ctx);
   await profilRoutes(app, ctx);
   await lamaranRoutes(app, ctx);
