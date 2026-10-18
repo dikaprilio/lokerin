@@ -6,9 +6,7 @@ settings:
 
 importers:
 
-  .: {}
-
-  apps/api:
+  .:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^4.0.96
