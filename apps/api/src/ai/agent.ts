@@ -48,7 +48,15 @@ export function createMastra(db: Db, pool: pg.Pool, models: Models) {
     instructions: ({ requestContext }: { requestContext: RequestContext<LokerinRequestContext> }) => {
       const user = requestContext.get("user");
       const kanal = requestContext.get("kanal");
-      return [UMUM, user?.role === "pemberi" ? PEMBERI : PENCARI, kanal === "suara" ? SUARA : ""].join("\n\n");
+      const hariIni = new Intl.DateTimeFormat("id-ID", {
+        timeZone: "Asia/Jakarta",
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }).format(new Date());
+      const tanggal = `Hari ini ${hariIni} (WIB). Ubah tanggal relatif seperti "besok" atau "minggu depan" menjadi tanggal YYYY-MM-DD; untuk "minggu depan" pakai Senin minggu depan.`;
+      return [UMUM, tanggal, user?.role === "pemberi" ? PEMBERI : PENCARI, kanal === "suara" ? SUARA : ""].join("\n\n");
     },
     model: models.chat("low"),
     tools: ({ requestContext }: { requestContext: RequestContext<LokerinRequestContext> }) =>

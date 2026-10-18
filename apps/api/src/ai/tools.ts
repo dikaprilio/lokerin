@@ -90,13 +90,20 @@ export function createTools(db: Db, models: Models) {
       kategori: z.string().optional(),
       segmen: z.enum(["informal", "magang"]).optional(),
       jenis_upah: jenisUpah.optional(),
-      upah_min_bulanan: z.number().int().optional(),
+      upah_min_harian: z.number().int().optional().describe("Isi bila pengguna menyebut upah minimal per hari, misalnya 100000"),
+      upah_min_bulanan: z.number().int().optional().describe("Isi bila pengguna menyebut upah minimal per bulan"),
       butuh_hari_ini: z.boolean().optional().describe("true untuk lowongan mendadak hari ini"),
-      persona_id: z.string().optional().describe("Persona yang dipakai untuk menilai kecocokan"),
+      persona_id: z
+        .string()
+        .optional()
+        .describe("Persona untuk menilai kecocokan; bila kosong, Persona yang paling mirip dengan kueri dipilih otomatis"),
     }),
-    execute: async (input, context) => {
+    execute: async ({ upah_min_harian, ...input }, context) => {
       const user = context.requestContext ? currentUser(context.requestContext) : null;
-      const hasil = await cariLowongan(db, models, user?.id ?? null, input);
+      const hasil = await cariLowongan(db, models, user?.id ?? null, {
+        ...input,
+        upah_min_bulanan: input.upah_min_bulanan ?? (upah_min_harian ? Math.round(upah_min_harian * 6 * 4.33) : undefined),
+      });
       return { widget: "daftar_lowongan" as const, ...hasil };
     },
   });
