@@ -52,11 +52,20 @@ Masuk dengan Google memakai access token dari Google Identity Services di browse
 - Kontak Pencari Kerja tersembunyi dari Pemberi Kerja sampai Lamaran Lolos, termasuk di PDF CV.
 - Pemeriksaan menahan Lowongan yang field wajibnya kosong atau meminta biaya dari pelamar, dan memberi Peringatan Upah dibanding UMK Banyumas.
 
-## Deploy ke Azure App Service
+## Deploy ke evergarden
 
-Workflow `.github/workflows/deploy.yml` membangun image dari `Dockerfile` (berbasis image Playwright agar Chromium tersedia), mendorongnya ke ACR, lalu memperbarui App Service.
+API berjalan di server evergarden sebagai container Docker (`lokerin-backend.service`, hanya di `127.0.0.1:3120`) dan dibuka ke publik lewat tunnel Cloudflare "lokerin" di `https://api-lokerin.yorhagarden.xyz`. Image dibangun dari `Dockerfile` (berbasis image Playwright agar Chromium tersedia untuk PDF CV). Kode ada di `~/dev/lokerin/lokerin-backend`, dan `.env` produksi hanya ada di folder itu, tidak pernah di-commit.
 
-1. Buat App Service Linux B1 di Southeast Asia (container), ACR Basic, dan federated credential GitHub untuk OIDC.
-2. Secrets repo: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`. Variables: `ACR_NAME`, `AZURE_WEBAPP_NAME`.
-3. Pengaturan App Service: Always On aktif, HTTPS only, session affinity mati, health check `/healthz`, `WEBSITES_PORT=8080`, `WEBSITES_CONTAINER_START_TIME_LIMIT=600`, plus semua variabel dari `.env.example`.
-4. Jangan deploy atau mengubah pengaturan saat penjurian: restart memutus panggilan suara.
+Workflow `.github/workflows/deploy.yml` menjalankan typecheck dan build di setiap PR. Push ke `main` lalu memanggil `lokerin-backend-deploy` di server lewat SSH: tarik `main`, build image, migrasi, restart, cek `/healthz`, dan kembali ke image sebelumnya bila gagal.
+
+Pemasangan sekali di server:
+
+```bash
+sudo cp deploy/evergarden/lokerin-backend.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now lokerin-backend
+install -m 755 deploy/evergarden/deploy.sh ~/.local/bin/lokerin-backend-deploy
+```
+
+Kunci deploy: buat pasangan kunci khusus, tambahkan kunci publiknya ke `~/.ssh/authorized_keys` dengan `command="/home/aliceevr/.local/bin/lokerin-backend-deploy",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty` di depannya, lalu isi kunci privatnya sebagai secret repo `EVERGARDEN_SSH_KEY`. Perubahan `deploy.sh` baru berlaku setelah dipasang ulang ke `~/.local/bin`.
+
+Deploy manual: `ssh evergarden .local/bin/lokerin-backend-deploy`. Jangan deploy atau mengubah pengaturan saat penjurian: restart memutus panggilan suara.

@@ -1,0 +1,24 @@
+# /etc/systemd/system/lokerin-backend.service
+# API hanya di loopback; tunnel Cloudflare "lokerin" meneruskan
+# api-lokerin.yorhagarden.xyz ke 127.0.0.1:3120.
+[Unit]
+Description=Lokerin backend API (Docker, 127.0.0.1:3120)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=aliceevr
+Group=aliceevr
+ExecStartPre=-/usr/bin/docker rm -f lokerin-backend
+ExecStart=/usr/bin/docker run --rm --name lokerin-backend --init --shm-size=1g \
+  --env-file /home/aliceevr/dev/lokerin/lokerin-backend/.env \
+  -e HOST=0.0.0.0 -e PORT=8080 -p 127.0.0.1:3120:8080 \
+  lokerin-backend:latest
+ExecStop=/usr/bin/docker stop -t 20 lokerin-backend
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
