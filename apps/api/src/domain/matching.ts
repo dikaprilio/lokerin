@@ -78,7 +78,7 @@ export async function cariLowongan(db: Db, models: Models, userId: string | null
 
   const upahMin =
     input.upah_min_bulanan ??
-    (pref.upah_min ? (pref.upah_satuan === "harian" ? Math.round(pref.upah_min * 26) : pref.upah_min) : undefined);
+    (pref.upah_min ? (pref.upah_satuan === "harian" ? Math.round(pref.upah_min * 6 * 4.33) : pref.upah_min) : undefined);
 
   const hasil = [];
   const diLuarPreferensi = [];

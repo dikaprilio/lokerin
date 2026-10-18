@@ -58,7 +58,7 @@ export function penuhWaktu(upah: Upah) {
 }
 
 export function formatRupiah(value: number) {
-  return `Rp${value.toLocaleString("id-ID")}`;
+  return `Rp${Math.round(value).toLocaleString("id-ID")}`;
 }
 
 export function labelUpah(upah: Upah) {

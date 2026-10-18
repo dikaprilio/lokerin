@@ -149,7 +149,7 @@ try {
   for (let start = 0; start < inserted.length; start += 25) {
     await embedLowongan(db, models, inserted.slice(start, start + 25));
   }
-  console.log(`Lowongan: ${inserted.length} (dengan embedding)`);
+  console.log(`Lowongan: ${inserted.length}`);
 
   for (const item of pencari) {
     const [user] = await db
@@ -175,8 +175,8 @@ try {
           kind: entry.kind,
           title: entry.title,
           detail: entry.detail ?? null,
-          place: entry.place ?? null,
-          period: entry.period ?? null,
+          place: entry.place || null,
+          period: entry.period || null,
           status: "terkonfirmasi" as const,
           source: "formulir" as const,
           confirmedAt: new Date(),
