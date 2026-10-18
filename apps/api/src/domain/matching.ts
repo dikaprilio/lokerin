@@ -36,6 +36,19 @@ export async function cariLowongan(db: Db, models: Models, userId: string | null
     persona = await db.query.personas.findFirst({
       where: and(eq(personas.id, input.persona_id), eq(personas.userId, userId)),
     });
+  } else if (userId && input.kueri) {
+    // Tanpa persona_id, pilih Persona milik pengguna yang paling mirip dengan kueri.
+    const kueriVector = await models.embed(input.kueri).catch(() => null);
+    if (kueriVector) {
+      const jarak = sql<number>`${personas.embedding} <=> ${JSON.stringify(kueriVector)}::vector`;
+      const [terdekat] = await db
+        .select({ persona: personas, jarak })
+        .from(personas)
+        .where(and(eq(personas.userId, userId), isNotNull(personas.embedding)))
+        .orderBy(asc(jarak))
+        .limit(1);
+      if (terdekat && Number(terdekat.jarak) < 0.75) persona = terdekat.persona;
+    }
   }
   const pref: Preferensi = persona?.preferensi ?? { kota: [] };
   const kota = input.kota?.length ? input.kota : pref.mau_pindah ? [] : pref.kota;
