@@ -27,8 +27,12 @@ type ActiveCall = {
   fragments: Fragment[];
   queue: Promise<void>;
   timer: NodeJS.Timeout;
+  keepalive: NodeJS.Timeout;
   closed: boolean;
 };
+
+/** Ping sideband agar koneksi keluar yang diam tidak diputus timeout idle SNAT Azure (sekitar 4 menit). */
+const KEEPALIVE_MS = 30_000;
 
 const commentaryLimit = (text: string) => {
   const encoded = Buffer.from(text);
@@ -103,8 +107,13 @@ export class LiveVoice {
       queue: Promise.resolve(),
       closed: false,
       timer: setTimeout(() => void this.close(user, id).catch(() => {}), this.env.LIVE_MAX_SECONDS * 1000),
+      keepalive: setInterval(() => {
+        const ws = socket.socket.platformSocket;
+        if (ws.readyState === ws.OPEN) ws.ping();
+      }, KEEPALIVE_MS),
     };
     call.timer.unref();
+    call.keepalive.unref();
     this.calls.set(id, call);
     socket.on("event", (event: ConnectServerEvent) => this.receive(call, event));
     socket.on("error", (error: unknown) => {
@@ -134,6 +143,7 @@ export class LiveVoice {
     if (call.closed) return;
     call.closed = true;
     clearTimeout(call.timer);
+    clearInterval(call.keepalive);
     this.calls.delete(call.id);
     try {
       call.socket.close();
