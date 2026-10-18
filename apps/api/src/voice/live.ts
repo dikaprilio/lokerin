@@ -69,7 +69,8 @@ export class LiveVoice {
       throw new HttpError(503, "suara_penuh", "Panggilan suara sedang penuh. Pakai obrolan teks dulu.");
     }
     const peran = user.role === "pemberi" ? "Pengguna ini Pemberi Kerja yang ingin memasang lowongan atau melihat pelamar." : "Pengguna ini Pencari Kerja.";
-    const result = await this.client.live.create(
+    const result = await this.client.live
+      .create(
       {
         session: {
           model: this.env.OPENAI_LIVE_MODEL,
@@ -86,7 +87,11 @@ export class LiveVoice {
         transport: { type: "webrtc", sdp },
       } as never,
       { timeout: 20_000 },
-    );
+      )
+      .catch((error: unknown) => {
+        this.log.warn({ err: error }, "membuka sesi gpt-live-1 gagal");
+        throw new HttpError(502, "suara_gagal", "Panggilan suara belum bisa dimulai. Pakai obrolan teks dulu.");
+      });
     const id = result.session.id;
     const socket = new SidebandWS(this.client, { session_id: id });
     const call: ActiveCall = {
