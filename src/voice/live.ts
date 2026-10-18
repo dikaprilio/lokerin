@@ -173,7 +173,8 @@ export class LiveVoice {
         call.queue = call.queue.then(() => this.delegate(call, event.delegation.id, event.offset_ms)).catch(() => {});
         break;
       case "session.closed":
-        void this.finish(call, "selesai");
+        this.log.info({ call: call.id, reason: event.reason }, "sesi suara ditutup OpenAI");
+        void this.finish(call, event.reason);
         break;
       case "error":
         this.emit(call, "suara.peringatan", { pesan: "Sebagian jawaban suara gagal. Kamu bisa mengulang atau mengetik." });
