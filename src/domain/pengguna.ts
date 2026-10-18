@@ -9,10 +9,17 @@ export const KOTA_AWAL = "Purwokerto";
 export type IsiTamu = { peran: Peran; nama: string; kota?: string; kecamatan?: string };
 
 /** Akun tamu dari onboarding: akun sungguhan tanpa `demoKey`, jadi akun demo hasil seed tidak tertimpa. */
-export async function buatTamu(db: Db, isi: IsiTamu) {
+export async function buatTamu(db: Db, isi: IsiTamu, google?: { sub: string; email: string | null }) {
   const [user] = await db
     .insert(users)
-    .values({ role: isi.peran, name: isi.nama, city: isi.kota ?? KOTA_AWAL, district: isi.kecamatan ?? null })
+    .values({
+      role: isi.peran,
+      name: isi.nama,
+      city: isi.kota ?? KOTA_AWAL,
+      district: isi.kecamatan ?? null,
+      googleSub: google?.sub ?? null,
+      email: google?.email ?? null,
+    })
     .returning();
   if (!user) throw new Error("Akun tamu gagal dibuat");
   return user;

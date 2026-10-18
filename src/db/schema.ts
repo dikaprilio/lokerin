@@ -33,6 +33,8 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   phone: text("phone"),
   email: text("email"),
+  /** Sub (ID akun) Google; diisi saat pengguna masuk dengan Google. */
+  googleSub: text("google_sub").unique(),
   city: text("city").notNull(),
   district: text("district"),
   lat: doublePrecision("lat"),

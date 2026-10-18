@@ -20,6 +20,8 @@ const schema = z.object({
   SESSION_SECRET: z.string().min(32),
   FRONTEND_ORIGINS: csv(),
   PUBLIC_WEB_URL: z.string().url().default("http://localhost:3000"),
+  /** Client ID OAuth Google (tipe Web application), dipisah koma. Kosong berarti masuk dengan Google mati. */
+  GOOGLE_CLIENT_IDS: csv(),
   OPENROUTER_API_KEY: z.string().min(1),
   OPENROUTER_MODEL: z.string().default("deepseek/deepseek-v4.1-flash-1017"),
   OPENROUTER_FALLBACK_MODEL: z.string().default("deepseek/deepseek-v4.1-flash"),

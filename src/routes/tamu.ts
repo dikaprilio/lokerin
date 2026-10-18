@@ -1,6 +1,9 @@
 import type { FastifyInstance } from "fastify";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import type { AppContext } from "../context.js";
+import { users } from "../db/schema.js";
+import { periksaAksesGoogle } from "../auth/google.js";
 import { issueToken, requireUser, setSessionCookie } from "../auth/session.js";
 import { buatTamu, daftarPemberiKerja, ubahPengguna } from "../domain/pengguna.js";
 import { parse } from "./util.js";
@@ -12,6 +15,12 @@ const tamuSchema = z.object({
   nama: teks(80),
   kota: teks(80).optional(),
   kecamatan: teks(80).optional(),
+});
+
+const googleSchema = z.object({
+  access_token: z.string().min(10).max(4096),
+  /** Diisi di akhir onboarding untuk membuat akun; tanpa ini, akun baru hanya dikenali. */
+  daftar: tamuSchema.optional(),
 });
 
 const pemberiKerjaSchema = z.object({
@@ -44,6 +53,39 @@ export async function tamuRoutes(app: FastifyInstance, ctx: AppContext) {
       setSessionCookie(reply, token, secure);
       reply.code(201);
       return { token, pengguna: { id: user.id, peran: user.role, nama: user.name, kota: user.city } };
+    },
+  );
+
+  /**
+   * Masuk dengan Google. Akun lama langsung dapat sesi. Akun baru dijawab `baru: true` beserta nama
+   * dari Google supaya onboarding bisa mengisinya, lalu dibuat saat onboarding mengirim `daftar`.
+   */
+  app.post(
+    "/auth/google",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      const body = parse(googleSchema, request.body);
+      const google = await periksaAksesGoogle(body.access_token, ctx.env.GOOGLE_CLIENT_IDS);
+      const cari = () => db.query.users.findFirst({ where: eq(users.googleSub, google.sub) });
+
+      let user = await cari();
+      if (!user && !body.daftar) return { baru: true, google: { nama: google.nama, email: google.email } };
+      if (!user && body.daftar) {
+        try {
+          user = await buatTamu(db, body.daftar, { sub: google.sub, email: google.email });
+          reply.code(201);
+        } catch (galat) {
+          // Dua tab menyelesaikan onboarding bersamaan: pakai akun yang sudah jadi.
+          const kode = (galat as { code?: string; cause?: { code?: string } }).cause?.code ?? (galat as { code?: string }).code;
+          if (kode !== "23505") throw galat;
+          user = await cari();
+        }
+      }
+      if (!user) throw new Error("Akun Google gagal dibuat");
+
+      const token = issueToken({ id: user.id, role: user.role }, ctx.env.SESSION_SECRET);
+      setSessionCookie(reply, token, secure);
+      return { baru: reply.statusCode === 201, token, pengguna: { id: user.id, peran: user.role, nama: user.name, kota: user.city } };
     },
   );
 
