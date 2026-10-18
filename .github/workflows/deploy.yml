@@ -1,12 +1,12 @@
-name: Deploy API ke Azure
+name: Deploy backend ke Azure
 
-# Membangun image apps/api, mendorongnya ke Azure Container Registry, lalu
+# Membangun image backend, mendorongnya ke Azure Container Registry, lalu
 # memperbarui Azure App Service. Jangan menjalankan workflow ini saat penjurian:
 # restart memutus panggilan suara yang sedang berjalan.
 on:
   push:
     branches: [main]
-    paths: ["apps/api/**", "pnpm-lock.yaml", ".github/workflows/deploy-api.yml"]
+    paths: ["src/**", "drizzle/**", "package.json", "pnpm-lock.yaml", "Dockerfile", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 
 permissions:
@@ -34,8 +34,8 @@ jobs:
       - name: Build dan push image ke ACR
         run: |
           az acr login --name "${{ vars.ACR_NAME }}"
-          IMAGE="${{ vars.ACR_NAME }}.azurecr.io/lokerin-api:${{ github.sha }}"
-          docker build -f apps/api/Dockerfile -t "$IMAGE" .
+          IMAGE="${{ vars.ACR_NAME }}.azurecr.io/lokerin-backend:${{ github.sha }}"
+          docker build -t "$IMAGE" .
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
