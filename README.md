@@ -30,11 +30,13 @@ Masuk dengan akun demo: `POST /auth/demo {"key":"pak-darto"}`. Respons berisi `t
 
 Onboarding membuat akun tamu sungguhan tanpa menimpa akun demo: `POST /auth/tamu {"peran":"pencari","nama":"Sari"}` (opsional `kota`, bawaan Purwokerto, dan `kecamatan`; maksimal 10 kali per menit per IP) menjawab dengan bentuk yang sama seperti `/auth/demo`. Pemberi Kerja tamu lalu mendaftarkan usahanya lewat `POST /pemberi/daftar`. Verifikasi masih demo: mencentang KTP hanya membuat status `menunggu`, dan lencana Terverifikasi tidak pernah diberikan otomatis. Nama dan lokasi bisa diubah lewat `PATCH /me`. Akun tamu ikut terhapus saat `pnpm db:seed`.
 
+Masuk dengan Google memakai access token dari Google Identity Services di browser (tanpa client secret): `POST /auth/google {"access_token":"..."}`. Server memeriksa bahwa token diterbitkan untuk salah satu `GOOGLE_CLIENT_IDS` dan emailnya terverifikasi. Akun yang sudah ada langsung mendapat `token`. Akun baru dijawab `{"baru":true,"google":{"nama","email"}}` tanpa dibuat dulu; onboarding lalu mengirim ulang token dengan `daftar` (isi yang sama seperti `/auth/tamu`) untuk membuat akun. Bila `GOOGLE_CLIENT_IDS` kosong, rute ini menjawab 503 `google_belum_diatur`.
+
 ## Endpoint utama
 
 | Area | Endpoint |
 |---|---|
-| Sesi | `GET /auth/akun-demo`, `POST /auth/demo`, `POST /auth/tamu`, `POST /auth/keluar`, `GET /me`, `PATCH /me` |
+| Sesi | `GET /auth/akun-demo`, `POST /auth/demo`, `POST /auth/tamu`, `POST /auth/google`, `POST /auth/keluar`, `GET /me`, `PATCH /me` |
 | Pembaruan langsung | `GET /events?kota=Purwokerto` (SSE: `lowongan.baru`, `butuh_hari_ini`, `lamaran.masuk`, `lamaran.status`, `suara.*`) |
 | Lowongan | `GET /lowongan`, `POST /lowongan/cari`, `GET /lowongan/peta`, `GET /lowongan/statistik`, `GET /lowongan/:id`, `POST /lowongan/:id/laporkan` |
 | Pemberi Kerja | `POST /pemberi/daftar`, `GET/POST /pemberi/lowongan`, `PATCH /pemberi/lowongan/:id`, `POST /pemberi/lowongan/:id/terbit`, `POST /pemberi/lowongan/:id/tutup`, `GET /pemberi/lamaran` |
