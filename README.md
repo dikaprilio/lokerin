@@ -85,29 +85,45 @@ API dan database berjalan di satu VPS IDCloudHost (Jakarta, 2 vCPU / 4 GB / 40 G
 
 ### Prinsip SSH
 
-- Login hanya dengan kunci. Password SSH dan login root dimatikan, hanya user admin dan `deploy` yang boleh masuk. Ada juga ufw (22, 80, 443) dan fail2ban.
+- Login hanya dengan kunci. Password SSH dan login root dimatikan, dan hanya anggota grup `lokerin-ssh` (admin tim dan `deploy`) yang boleh masuk. Ada juga ufw (22, 80, 443) dan fail2ban.
+- Setiap orang punya user dan kuncinya sendiri, jadi akses bisa dicabut per orang tanpa mengganti kunci orang lain. Kunci privat tidak pernah dikirim; yang dikirim hanya kunci publik.
 - Kunci CI adalah kunci khusus yang tidak dipakai di tempat lain. Di `authorized_keys` milik `deploy` kunci itu diawali `command="/usr/local/bin/lokerin-deploy",restrict`: tanpa shell, tanpa port forwarding, dan hanya bisa `deploy <sha>`, `rollback`, atau `status`.
 - `lokerin-deploy` milik root, jadi user `deploy` tidak bisa mengubah perintah yang dijalankan kuncinya. Sudo untuk `deploy` hanya `systemctl restart/stop lokerin-backend` dan `journalctl` unit itu.
 - Kunci host server disematkan di workflow (`DEPLOY_KNOWN_HOST`), jadi CI menolak bila yang menjawab bukan server ini.
 - Token GHCR untuk pull adalah `GITHUB_TOKEN` milik job. Token ini dikirim lewat stdin, berlaku selama job saja, dan langsung di-logout setelah pull.
 
+### Akses tim
+
+Anggota baru menjalankan `deploy/vps/akses-laptop.sh` di laptopnya. Skrip ini memakai atau membuat kunci berkomentar `<nama>@lokerin-vps`, menyematkan kunci host VPS, dan menambahkan `ssh lokerin-vps` serta tunnel `ssh -N lokerin-db` (Postgres di `127.0.0.1:5433`). Ia lalu mengirim kunci publiknya, dan admin menambahkannya:
+
+```bash
+ssh lokerin-vps sudo lokerin-tambah-admin <nama> "<kunci publik>"
+ssh lokerin-vps sudo deluser --remove-home <nama>     # cabut akses
+```
+
+Admin masuk ke grup `lokerin-ssh` dan `lokerin-admin` (sudo tanpa sandi) serta bisa membaca log. User `deploy` tetap khusus untuk CI.
+
 ### Pemasangan sekali
 
 ```bash
 scp -r deploy/vps lokerin@<ip>:/tmp/lokerin-vps
-ssh -t lokerin@<ip> sudo bash /tmp/lokerin-vps/bootstrap.sh "$(cat ~/.ssh/lokerin_deploy.pub)"
+ssh lokerin@<ip> "sudo setsid nohup bash /tmp/lokerin-vps/bootstrap.sh '$(cat ~/.ssh/lokerin_deploy.pub)' > /tmp/lokerin-bootstrap.log 2>&1 < /dev/null &"
+ssh lokerin@<ip> tail -f /tmp/lokerin-bootstrap.log
 ```
+
+Skrip berjalan terlepas dari sesi SSH, jadi koneksi yang putus tidak menghentikannya di tengah upgrade paket.
 
 Lalu lengkapi `/etc/lokerin/backend.env` dari `.env.example`. `DATABASE_URL`, `SESSION_SECRET`, dan origin sudah diisi skrip. Isi secret repo `DEPLOY_SSH_KEY` dengan kunci privat `lokerin_deploy`, lalu ganti `DEPLOY_HOST` dan `DEPLOY_KNOWN_HOST` di workflow (`ssh-keyscan -t ed25519 <ip>`).
 
-Perubahan di `deploy/vps/*` baru berlaku setelah `bootstrap.sh` dijalankan ulang. Skrip ini aman diulang dan tidak menimpa `backend.env`.
+Perubahan di `deploy/vps/*` baru berlaku setelah `bootstrap.sh` dijalankan ulang. Skrip ini aman diulang dan tidak menimpa `backend.env`. Docker dan Postgres hanya di-restart bila berkas konfigurasinya berubah, jadi menjalankan ulang tanpa perubahan tidak memutus API.
 
 ### Perintah harian
 
 ```bash
-ssh deploy@api.lokerin.site status            # image yang berjalan + /healthz
-ssh lokerin@api.lokerin.site journalctl -u lokerin-backend -f
-ssh lokerin@api.lokerin.site sudo -u postgres psql lokerin
+ssh lokerin-vps sudo -u deploy lokerin-deploy status   # image yang berjalan + /healthz
+ssh lokerin-vps journalctl -u lokerin-backend -f        # log API
+ssh lokerin-vps sudo -u postgres psql lokerin           # psql produksi
+ssh -N lokerin-db                                        # tunnel Postgres ke 127.0.0.1:5433
 ```
 
 Jangan deploy atau mengubah pengaturan saat penjurian: restart memutus panggilan suara.
