@@ -261,3 +261,36 @@ export const laporan = pgTable("laporan", {
   alasan: text("alasan").notNull(),
   createdAt: createdAt(),
 });
+
+export type JenisKabar = "lamaran_masuk" | "lamaran_dilihat" | "lamaran_lolos" | "tahap_baru" | "lamaran_tidak_lolos" | "butuh_hari_ini";
+
+/** Kabar: pemberitahuan yang disimpan, jadi tetap ada setelah aplikasi ditutup (ADR 0008). */
+export const kabar = pgTable(
+  "kabar",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    jenis: text("jenis").$type<JenisKabar>().notNull(),
+    judul: text("judul").notNull(),
+    isi: text("isi").notNull(),
+    /** Path di aplikasi web, misalnya /app/lamaran?id=... */
+    tautan: text("tautan").notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [index("kabar_penerima_idx").on(table.userId, table.createdAt)],
+);
+
+/** Satu langganan Web Push per perangkat; dihapus otomatis saat layanan push menjawab 404 atau 410. */
+export const langgananPush = pgTable("langganan_push", {
+  id: id(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: createdAt(),
+});

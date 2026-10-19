@@ -15,6 +15,13 @@
       "when": 1792328986244,
       "tag": "0001_google_sub",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792380052495,
+      "tag": "0002_kabar",
+      "breakpoints": true
     }
   ]
 }

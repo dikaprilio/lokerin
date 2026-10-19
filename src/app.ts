@@ -18,6 +18,8 @@ import { profilRoutes } from "./routes/profil.js";
 import { lamaranRoutes } from "./routes/lamaran.js";
 import { cvRoutes } from "./routes/cv.js";
 import { chatRoutes } from "./routes/chat.js";
+import { kabarRoutes } from "./routes/kabar.js";
+import { aturPush } from "./kabar/push.js";
 
 export async function buildApp(env: Env) {
   const app = Fastify({
@@ -87,6 +89,8 @@ export async function buildApp(env: Env) {
   await lamaranRoutes(app, ctx);
   await cvRoutes(app, ctx);
   await chatRoutes(app, ctx, memory, live);
+  await kabarRoutes(app, ctx);
+  aturPush(env, app.log);
 
   app.addHook("onClose", async () => {
     await live.shutdown();
