@@ -1,54 +1,131 @@
-name: Deploy backend ke Azure
+name: CI/CD backend
 
-# Membangun image backend, mendorongnya ke Azure Container Registry, lalu
-# memperbarui Azure App Service. Jangan menjalankan workflow ini saat penjurian:
-# restart memutus panggilan suara yang sedang berjalan.
+# Setiap PR: typecheck, build, dan build image (tanpa push). Push ke main: image didorong ke
+# GHCR dengan tag SHA, lalu VPS IDCloudHost menariknya lewat SSH. Kunci SSH-nya dibatasi
+# forced command ke /usr/local/bin/lokerin-deploy, jadi hanya bisa deploy/rollback/status,
+# bukan membuka shell. Jangan deploy saat penjurian: restart memutus panggilan suara.
 on:
   push:
     branches: [main]
-    paths: ["src/**", "drizzle/**", "package.json", "pnpm-lock.yaml", "Dockerfile", ".github/workflows/deploy.yml"]
+    paths: ["src/**", "drizzle/**", "package.json", "pnpm-lock.yaml", "Dockerfile", ".dockerignore", ".github/workflows/deploy.yml"]
+  pull_request:
   workflow_dispatch:
+    inputs:
+      aksi:
+        description: "deploy (SHA saat ini) atau rollback ke image sebelumnya"
+        type: choice
+        options: [deploy, rollback]
+        default: deploy
 
 permissions:
-  id-token: write
   contents: read
 
-concurrency:
-  group: deploy-api
-  cancel-in-progress: false
+env:
+  IMAGE: ghcr.io/dikaprilio/lokerin-backend
+  API_URL: https://api.lokerin.site
+  DEPLOY_HOST: 103.54.170.204
+  DEPLOY_USER: deploy
+  # Kunci host publik VPS (bukan rahasia), dari ssh-keyscan. Mencegah SSH ke server palsu.
+  DEPLOY_KNOWN_HOST: "103.54.170.204 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ1tXFuobVCpu6X6EC/alG3WIaZ5pHzthXWCXOeZy3Rv"
 
 jobs:
-  deploy:
+  check:
+    if: github.event_name != 'workflow_dispatch' || inputs.aksi == 'deploy'
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: actions/checkout@v4
-
-      - name: Login Azure (OIDC)
-        uses: azure/login@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
 
-      - name: Build dan push image ke ACR
-        run: |
-          az acr login --name "${{ vars.ACR_NAME }}"
-          IMAGE="${{ vars.ACR_NAME }}.azurecr.io/lokerin-backend:${{ github.sha }}"
-          docker build -t "$IMAGE" .
-          docker push "$IMAGE"
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
-
-      - name: Deploy ke App Service
-        uses: azure/webapps-deploy@v3
+  image:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Login GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
         with:
-          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
-          images: ${{ env.IMAGE }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Cek /healthz
+  deploy:
+    needs: image
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: deploy-api
+      cancel-in-progress: false
+    steps:
+      - name: Siapkan SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
-          for i in $(seq 1 30); do
-            if curl -fsS "https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net/healthz"; then exit 0; fi
-            sleep 10
+          if [ -z "$SSH_KEY" ]; then
+            echo "::error::Secret DEPLOY_SSH_KEY belum diisi. Lihat bagian Deploy di README."
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOST" > ~/.ssh/known_hosts
+
+      - name: Deploy ${{ github.sha }}
+        env:
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Token GHCR lewat stdin, bukan argumen, supaya tidak muncul di daftar proses server.
+        run: |
+          printf '%s %s\n' "$ACTOR" "$TOKEN" \
+            | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+                "$DEPLOY_USER@$DEPLOY_HOST" deploy "${{ github.sha }}"
+
+      - name: Cek /healthz publik
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsS "$API_URL/healthz"; then exit 0; fi
+            sleep 5
           done
           exit 1
+
+  rollback:
+    if: github.event_name == 'workflow_dispatch' && inputs.aksi == 'rollback'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-api
+      cancel-in-progress: false
+    steps:
+      - name: Rollback
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOST" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" rollback < /dev/null
+          curl -fsS "$API_URL/healthz"
