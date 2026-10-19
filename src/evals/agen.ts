@@ -73,6 +73,18 @@ const SKENARIO: Skenario[] = [
     harus: ["siapkan_laporan"],
     tidakBoleh: ["siapkan_lamaran"],
   },
+  {
+    nama: "beberapa pilihan dalam satu tanya",
+    peran: "pencari",
+    pesan: "Aku mau cari kerja jaga toko, tapi belum tahu mau shift apa, dibayar harian atau bulanan, dan bisa mulai kapan. Tanyain aku pakai pilihan ya",
+    harus: ["tanya_pengguna"],
+    periksa: (masukan, panggilan) => {
+      const kali = panggilan.filter((p) => p === "tanya_pengguna").length;
+      const n = ((masukan.tanya_pengguna as { pertanyaan?: unknown[] } | undefined)?.pertanyaan ?? []).length;
+      if (kali !== 1) return `tanya_pengguna dipanggil ${kali} kali, seharusnya 1`;
+      return n >= 2 ? null : `${n} pertanyaan dalam satu panggilan, seharusnya minimal 2`;
+    },
+  },
   { nama: "revisi CV Khusus", peran: "pencari", pesan: "Ringkasan di CV khusus cv-1 kepanjangan, pendekin jadi dua kalimat aja", harus: ["ubah_cv_khusus"] },
   {
     nama: "revisi CV sekali per permintaan",
