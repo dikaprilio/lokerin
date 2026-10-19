@@ -103,10 +103,15 @@ export async function lowonganRoutes(app: FastifyInstance, ctx: AppContext) {
         lat: z.coerce.number().default(-7.4246),
         lng: z.coerce.number().default(109.2343),
         radius_km: z.coerce.number().min(0.5).max(50).default(8),
+        butuh_hari_ini: z.enum(["true", "false"]).optional(),
       }),
       request.query,
     );
-    return { pusat: { lat: query.lat, lng: query.lng }, lowongan: await lowonganDiSekitar(db, query.lat, query.lng, query.radius_km) };
+    return {
+      pusat: { lat: query.lat, lng: query.lng },
+      radius_km: query.radius_km,
+      lowongan: await lowonganDiSekitar(db, query.lat, query.lng, query.radius_km, { butuhHariIni: query.butuh_hari_ini === "true" }),
+    };
   });
 
   /** Penghitung di halaman utama. */

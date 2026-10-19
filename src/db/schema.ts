@@ -20,6 +20,11 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => "bytea",
 });
 
+/** Titik PostGIS (geography, WGS84). Jarak dan radius dihitung dalam meter di atas bumi. */
+const geografi = customType<{ data: string; driverData: string }>({
+  dataType: () => "geography(Point,4326)",
+});
+
 const id = () => uuid("id").primaryKey().defaultRandom();
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
@@ -152,6 +157,10 @@ export const lowongan = pgTable(
     address: text("address"),
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
+    /** Diisi otomatis dari lat dan lng untuk pencarian sekitar (ST_DWithin, indeks GiST). */
+    titik: geografi("titik").generatedAlwaysAs(
+      sql`CASE WHEN lat IS NOT NULL AND lng IS NOT NULL THEN ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography END`,
+    ),
     urgentUntil: timestamp("urgent_until", { withTimezone: true }),
     language: text("language").$type<"id" | "en">().notNull().default("id"),
     status: text("status").$type<StatusLowongan>().notNull().default("draf"),
@@ -165,6 +174,7 @@ export const lowongan = pgTable(
     index("lowongan_feed_idx").on(table.status, table.city),
     index("lowongan_employer_idx").on(table.employerId),
     index("lowongan_embedding_idx").using("hnsw", table.embedding.op("vector_cosine_ops")),
+    index("lowongan_titik_idx").using("gist", table.titik),
   ],
 );
 

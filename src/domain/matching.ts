@@ -135,17 +135,30 @@ export async function cariLowongan(db: Db, models: Models, userId: string | null
   };
 }
 
-export async function lowonganDiSekitar(db: Db, lat: number, lng: number, radiusKm: number) {
-  const distanceKm = sql<number>`6371 * acos(least(1, greatest(-1,
-    cos(radians(${lat})) * cos(radians(${lowongan.lat})) * cos(radians(${lowongan.lng}) - radians(${lng}))
-    + sin(radians(${lat})) * sin(radians(${lowongan.lat})))))`;
+/** Lowongan Terbit dalam radius dari satu titik, terdekat dulu (PostGIS, indeks GiST pada `titik`). */
+export async function lowonganDiSekitar(
+  db: Db,
+  lat: number,
+  lng: number,
+  radiusKm: number,
+  saring: { butuhHariIni?: boolean } = {},
+) {
+  const pusat = sql`ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography`;
+  const distanceKm = sql<number>`ST_Distance(${lowongan.titik}, ${pusat}) / 1000`;
   const rows = await db
     .select({ lowongan, employer: employers, distanceKm })
     .from(lowongan)
     .innerJoin(employers, eq(employers.id, lowongan.employerId))
-    .where(and(eq(lowongan.status, "terbit"), isNotNull(lowongan.lat), sql`${distanceKm} <= ${radiusKm}`))
+    .where(
+      and(
+        eq(lowongan.status, "terbit"),
+        isNotNull(lowongan.titik),
+        sql`ST_DWithin(${lowongan.titik}, ${pusat}, ${radiusKm * 1000})`,
+        ...(saring.butuhHariIni ? [sql`${lowongan.urgentUntil} > now()`] : []),
+      ),
+    )
     .orderBy(asc(distanceKm))
-    .limit(100);
+    .limit(150);
   return rows.map((row) =>
     kartuLowongan(row.lowongan, row.employer, { jarak_km: Math.round(Number(row.distanceKm) * 10) / 10 }),
   );
