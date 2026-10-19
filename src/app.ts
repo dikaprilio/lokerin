@@ -31,7 +31,7 @@ export async function buildApp(env: Env) {
   const { db, pool } = createDb(env.DATABASE_URL);
   const models = createModels(env);
   const bus = new EventBus();
-  const { mastra, agent, memory } = createMastra(db, pool, models);
+  const { mastra, agent, memory } = createMastra(db, pool, models, { bus, env });
   const ctx: AppContext = { env, db, pool, models, bus, mastra };
   const live = new LiveVoice(env, agent, bus, app.log);
 
