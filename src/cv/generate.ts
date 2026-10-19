@@ -79,7 +79,7 @@ async function muatSumber(db: Db, userId: string, personaId: string, lowonganId:
     .innerJoin(employers, eq(employers.id, lowongan.employerId))
     .where(eq(lowongan.id, lowonganId))
     .then((rows) => rows[0]);
-  if (!user || !persona) throw new HttpError(404, "persona_tidak_ada", "Persona tidak ditemukan.");
+  if (!user || !persona) throw new HttpError(404, "persona_tidak_ada", "Kerja yang dipilih tidak ditemukan.");
   if (!target) throw new HttpError(404, "lowongan_tidak_ada", "Lowongan tidak ditemukan.");
 
   const sumber = await db
@@ -96,7 +96,7 @@ async function muatSumber(db: Db, userId: string, personaId: string, lowonganId:
     throw new HttpError(
       400,
       "fakta_kosong",
-      "Belum ada Fakta terkonfirmasi untuk Persona ini. Ceritakan pengalamanmu dulu, lalu konfirmasi Faktanya.",
+      "Belum ada bahan CV untuk kerja ini. Ceritakan pengalamanmu dulu, lalu ketuk Simpan pada yang benar.",
     );
   }
   return { user, persona, target, fakta: sumber };
@@ -283,9 +283,9 @@ export async function revisiCvKhusus(
   input: { cv_id: string; instruksi: string },
 ): Promise<HasilSiapkanCv> {
   const cv = await db.query.cvKhusus.findFirst({ where: and(eq(cvKhusus.id, input.cv_id), eq(cvKhusus.userId, userId)) });
-  if (!cv) throw new HttpError(404, "cv_tidak_ada", "CV Khusus tidak ditemukan.");
+  if (!cv) throw new HttpError(404, "cv_tidak_ada", "CV tidak ditemukan.");
   if (!cv.personaId || !cv.lowonganId) {
-    throw new HttpError(409, "cv_tanpa_sumber", "Persona atau Lowongan untuk CV ini sudah dihapus. Siapkan CV Khusus baru.");
+    throw new HttpError(409, "cv_tanpa_sumber", "Lowongan atau kerja untuk CV ini sudah dihapus. Susun CV lamaran baru.");
   }
   const sumber = await muatSumber(db, userId, cv.personaId, cv.lowonganId);
   const { isi, dibuang, faktaDipakai } = await susunIsi(models, sumber, { instruksi: input.instruksi, isi: normalisasiIsi(cv.isi) });
@@ -313,7 +313,7 @@ export async function simpanEditCv(
   input: { isi: IsiCv; template?: "satu_kolom" | "dua_kolom" },
 ) {
   const row = await db.query.cvKhusus.findFirst({ where: and(eq(cvKhusus.id, id), eq(cvKhusus.userId, userId)) });
-  if (!row) throw new HttpError(404, "cv_tidak_ada", "CV Khusus tidak ditemukan.");
+  if (!row) throw new HttpError(404, "cv_tidak_ada", "CV tidak ditemukan.");
   const awal = teksPerId(normalisasiIsi(row.isiAwal));
   const calonFakta: { item_id: string; text: string }[] = [];
   const isi: IsiCv = {

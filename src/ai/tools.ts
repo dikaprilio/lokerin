@@ -233,7 +233,7 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
       const persona = await db.query.personas.findFirst({
         where: and(eq(personas.id, input.persona_id), eq(personas.userId, user.id)),
       });
-      if (!target || !persona) return { widget: "galat" as const, pesan: "Lowongan atau Persona tidak ditemukan." };
+      if (!target || !persona) return { widget: "galat" as const, pesan: "Lowongan atau kerja yang dipilih tidak ditemukan." };
       const sudah = await db.query.lamaran.findFirst({
         where: and(eq(lamaran.lowonganId, input.lowongan_id), eq(lamaran.pencariId, user.id)),
       });
@@ -246,7 +246,7 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
         sudah_melamar: Boolean(sudah),
         peringatan:
           !input.cv_khusus_id && target.lowongan.segment === "magang"
-            ? "Lowongan magang biasanya membaca CV. Lamaranmu lebih kuat dengan CV Khusus."
+            ? "Lowongan magang biasanya membaca CV. Lamaranmu lebih kuat dengan CV lamaran."
             : null,
         tombol: { label: "Kirim Lamaran", method: "POST", path: "/lamaran" },
       };
@@ -380,7 +380,7 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
       const persona = await db.query.personas.findFirst({
         where: and(eq(personas.userId, user.id), ...(persona_id ? [eq(personas.id, persona_id)] : [])),
       });
-      if (!persona) return { widget: "galat" as const, pesan: "Belum ada Persona. Ceritakan pengalaman kerjamu dulu supaya Kartu Kerja bisa dibuat." };
+      if (!persona) return { widget: "galat" as const, pesan: "Lokerin belum tahu kamu bisa kerja apa. Ceritakan pengalaman kerjamu dulu supaya Kartu Kerja bisa dibuat." };
       const pemilik = await db.query.users.findFirst({ where: eq(users.id, user.id) });
       return {
         widget: "kartu_kerja" as const,

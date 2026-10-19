@@ -67,7 +67,7 @@ export async function cvRoutes(app: FastifyInstance, ctx: AppContext) {
    */
   async function access(user: SessionUser, id: string) {
     const cv = await db.query.cvKhusus.findFirst({ where: eq(cvKhusus.id, id) });
-    if (!cv) throw new HttpError(404, "cv_tidak_ada", "CV Khusus tidak ditemukan.");
+    if (!cv) throw new HttpError(404, "cv_tidak_ada", "CV tidak ditemukan.");
     if (cv.userId === user.id) return { cv, masked: false, owner: true };
     if (user.role === "pemberi") {
       const link = await db
@@ -79,7 +79,7 @@ export async function cvRoutes(app: FastifyInstance, ctx: AppContext) {
         .then((rows) => rows[0]);
       if (link) return { cv, masked: link.status !== "lolos", owner: false };
     }
-    throw new HttpError(404, "cv_tidak_ada", "CV Khusus tidak ditemukan.");
+    throw new HttpError(404, "cv_tidak_ada", "CV tidak ditemukan.");
   }
 
   /**
