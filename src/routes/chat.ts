@@ -107,9 +107,10 @@ export async function chatRoutes(app: FastifyInstance, ctx: AppContext, memory: 
     const { id } = parse(z.object({ id: z.string().optional() }), request.query);
     const threadId = threadFor(user.id, id);
     const thread = await memory.getThreadById({ threadId });
-    if (!thread || thread.resourceId !== user.id) return { id: threadId, messages: [] };
+    // `ada` tells a fresh conversation apart from a link to one that is not in this account.
+    if (!thread || thread.resourceId !== user.id) return { id: threadId, ada: false, messages: [] };
     const { messages } = await memory.recall({ threadId, resourceId: user.id, perPage: 40 } as never);
-    return { id: threadId, messages: toAISdkMessages(messages as never, { version: "v7" }) };
+    return { id: threadId, ada: true, judul: thread.title ?? null, messages: toAISdkMessages(messages as never, { version: "v7" }) };
   });
 
   /** Panggilan suara gpt-live-1: browser mengirim offer WebRTC, server mengembalikan answer. */
