@@ -22,6 +22,11 @@ const schema = z.object({
   PUBLIC_WEB_URL: z.string().url().default("http://localhost:3000"),
   /** Client ID OAuth Google (tipe Web application), dipisah koma. Kosong berarti masuk dengan Google mati. */
   GOOGLE_CLIENT_IDS: csv(),
+  /** Kunci VAPID untuk Web Push (npx web-push generate-vapid-keys). Kosong berarti Kabar hanya tampil di aplikasi. */
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  /** Kontak untuk layanan push: "mailto:..." atau URL https. */
+  VAPID_SUBJECT: z.string().optional(),
   OPENROUTER_API_KEY: z.string().min(1),
   OPENROUTER_MODEL: z.string().default("deepseek/deepseek-v4.1-flash-1017"),
   OPENROUTER_FALLBACK_MODEL: z.string().default("deepseek/deepseek-v4.1-flash"),

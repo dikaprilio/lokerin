@@ -14,6 +14,22 @@ import { HttpError } from "../auth/session.js";
 import { userChannel, type EventBus } from "../events/bus.js";
 import { kartuLamaran } from "./serialize.js";
 import { employerOf } from "./lowongan.js";
+import { kirimKabar } from "../kabar/kabar.js";
+
+type KartuLamaran = ReturnType<typeof kartuLamaran>;
+
+/** Isi Kabar untuk Pencari Kerja saat status Lamarannya berubah. Tanpa kontak: rinciannya dibuka di aplikasi. */
+function kabarUntukPencari(kartu: KartuLamaran, jenis: "lamaran_dilihat" | "lamaran_lolos" | "lamaran_tidak_lolos" | "tahap_baru") {
+  const usaha = kartu.pemberi_kerja.nama_usaha;
+  const posisi = kartu.lowongan.judul;
+  const isi = {
+    lamaran_dilihat: { judul: "Lamaranmu sudah dilihat", isi: `${usaha} sudah melihat lamaranmu untuk ${posisi}.` },
+    lamaran_lolos: { judul: "Kamu lolos!", isi: `${usaha} meloloskan lamaranmu untuk ${posisi}. Buka untuk melihat tahap berikutnya.` },
+    lamaran_tidak_lolos: { judul: "Kabar lamaranmu", isi: `${usaha} belum melanjutkan lamaranmu untuk ${posisi}. Masih ada lowongan lain yang cocok untukmu.` },
+    tahap_baru: { judul: "Ada tahap berikutnya", isi: `${usaha} menambahkan tahap berikutnya untuk ${posisi}.` },
+  }[jenis];
+  return { userId: kartu.pencari.id, jenis, ...isi, tautan: `/app/lamaran?lamaran=${kartu.id}`, push: jenis !== "lamaran_dilihat" };
+}
 
 export type TahapInput = {
   jenis: "whatsapp" | "meet" | "alamat" | "lainnya";
@@ -113,6 +129,18 @@ export async function kirimLamaran(
   const [forEmployer] = await cards(db, [row], "pemberi");
   const [forPencari] = await cards(db, [row], "pencari");
   bus.publish([userChannel(target.employer.userId)], { type: "lamaran.masuk", data: forEmployer });
+  if (forEmployer) {
+    void kirimKabar(db, bus, [
+      {
+        userId: target.employer.userId,
+        jenis: "lamaran_masuk",
+        judul: "Ada pelamar baru",
+        isi: `${forEmployer.pencari.nama} melamar ${forEmployer.lowongan.judul}.`,
+        tautan: `/app/pelamar?lamaran=${forEmployer.id}`,
+        push: true,
+      },
+    ]);
+  }
   return forPencari;
 }
 
@@ -141,6 +169,10 @@ async function ubahStatus(db: Db, bus: EventBus, row: typeof lamaran.$inferSelec
   if (!updated) throw new Error("Status Lamaran gagal diubah");
   const [forPencari] = await cards(db, [updated], "pencari");
   bus.publish([userChannel(updated.pencariId)], { type: "lamaran.status", data: forPencari });
+  if (forPencari && status !== "terkirim") {
+    const jenis = status === "dilihat" ? "lamaran_dilihat" : status === "lolos" ? "lamaran_lolos" : "lamaran_tidak_lolos";
+    void kirimKabar(db, bus, [kabarUntukPencari(forPencari, jenis)]);
+  }
   const [forEmployer] = await cards(db, [updated], "pemberi");
   return forEmployer;
 }
@@ -181,6 +213,7 @@ export async function tambahTahap(db: Db, bus: EventBus, userId: string, id: str
   await simpanTahap(db, row.id, tahap);
   const [forPencari] = await cards(db, [row], "pencari");
   bus.publish([userChannel(row.pencariId)], { type: "lamaran.status", data: forPencari });
+  if (forPencari) void kirimKabar(db, bus, [kabarUntukPencari(forPencari, "tahap_baru")]);
   return (await cards(db, [row], "pemberi"))[0];
 }
 

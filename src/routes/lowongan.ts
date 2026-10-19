@@ -8,6 +8,7 @@ import { cityChannel, publicChannel } from "../events/bus.js";
 import { cariLowongan, embedLowongan, lowonganDiSekitar } from "../domain/matching.js";
 import { buatDraf, employerOf, periksaUlang, ubahDraf, type IsiDraf } from "../domain/lowongan.js";
 import { kartuLowongan } from "../domain/serialize.js";
+import { kirimKabar, penerimaButuhHariIni } from "../kabar/kabar.js";
 import { idParam, parse } from "./util.js";
 
 const jenisUpah = z.enum(["harian", "mingguan", "bulanan", "borongan", "per_jam"]);
@@ -202,8 +203,27 @@ export async function lowonganRoutes(app: FastifyInstance, ctx: AppContext) {
     const published = kartuLowongan(row.lowongan, row.employer);
     const channels = [publicChannel, ...(row.lowongan.city ? [cityChannel(row.lowongan.city)] : [])];
     ctx.bus.publish(channels, { type: published.butuh_hari_ini ? "butuh_hari_ini" : "lowongan.baru", data: published });
+    if (published.butuh_hari_ini) void kabarButuhHariIni(row.lowongan, row.employer);
     return published;
   });
+
+  /** Kabar untuk Pencari Kerja di kota yang sama yang Personanya cocok; berjalan setelah respons dikirim. */
+  async function kabarButuhHariIni(row: typeof lowongan.$inferSelect, employer: typeof employers.$inferSelect) {
+    const penerima = await penerimaButuhHariIni(db, row.id, row.city).catch(() => []);
+    const tempat = row.district ?? row.city ?? "sekitarmu";
+    await kirimKabar(
+      db,
+      ctx.bus,
+      penerima.map((userId) => ({
+        userId,
+        jenis: "butuh_hari_ini" as const,
+        judul: "Butuh hari ini di dekatmu",
+        isi: `${employer.businessName} butuh ${row.title} hari ini di ${tempat}.`,
+        tautan: `/app/lowongan/${row.id}`,
+        push: true,
+      })),
+    );
+  }
 
   app.post("/pemberi/lowongan/:id/tutup", async (request) => {
     const user = requireUser(request, "pemberi");

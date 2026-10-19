@@ -1,16 +1,20 @@
+import { randomUUID } from "node:crypto";
 import { createTool } from "@mastra/core/tools";
 import type { RequestContext } from "@mastra/core/request-context";
 import { and, count, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
-import { employers, lamaran, lowongan, personas, type JenisUpah } from "../db/schema.js";
+import { employers, lamaran, lowongan, personas, users, type JenisUpah } from "../db/schema.js";
 import type { Models } from "./models.js";
 import type { SessionUser } from "../auth/session.js";
+import type { Env } from "../config/env.js";
+import type { EventBus } from "../events/bus.js";
 import { cariLowongan } from "../domain/matching.js";
 import { buatDraf, employerOf, ubahDraf, type IsiDraf } from "../domain/lowongan.js";
 import { profilInduk, simpanPersona, usulkanFakta } from "../domain/profil.js";
-import { lamaranMasuk, lamaranPencari } from "../domain/lamaran.js";
-import { siapkanCvKhusus } from "../cv/generate.js";
+import { lamaranMasuk, lamaranPencari, lamaranUntuk, tandaiDilihat } from "../domain/lamaran.js";
+import { revisiCvKhusus, siapkanCvKhusus } from "../cv/generate.js";
+import { daftarKabar } from "../kabar/kabar.js";
 import { kartuLowongan } from "../domain/serialize.js";
 
 export type LokerinRequestContext = { user: SessionUser; kanal: "teks" | "suara" };
@@ -79,7 +83,9 @@ function toIsiDraf(input: z.infer<typeof isiDrafSchema>): IsiDraf {
   };
 }
 
-export function createTools(db: Db, models: Models) {
+export type AlatDeps = { bus: EventBus; env: Env };
+
+export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
   const cari_lowongan = createTool({
     id: "cari_lowongan",
     description:
@@ -281,18 +287,24 @@ export function createTools(db: Db, models: Models) {
 
   const lowongan_saya = createTool({
     id: "lowongan_saya",
-    description: "Melihat Lowongan milik Pemberi Kerja (draf dan terbit) beserta jumlah Lamaran.",
-    inputSchema: z.object({}),
-    execute: async (_input, context) => {
+    description:
+      "Melihat Lowongan milik Pemberi Kerja (draf dan terbit) beserta jumlah Lamaran. Isi lowongan_id untuk membuka satu kartu Lowongan; dari kartu itu pengguna bisa mengetuk Terbitkan atau Tutup lowongan.",
+    inputSchema: z.object({ lowongan_id: z.string().optional().describe("Isi untuk membuka satu Lowongan") }),
+    execute: async ({ lowongan_id }, context) => {
       const user = currentUser(context.requestContext, "pemberi");
       const employer = await employerOf(db, user.id);
       const rows = await db
         .select({ lowongan, jumlah: count(lamaran.id) })
         .from(lowongan)
         .leftJoin(lamaran, eq(lamaran.lowonganId, lowongan.id))
-        .where(eq(lowongan.employerId, employer.id))
+        .where(and(eq(lowongan.employerId, employer.id), ...(lowongan_id ? [eq(lowongan.id, lowongan_id)] : [])))
         .groupBy(lowongan.id)
         .orderBy(desc(lowongan.updatedAt));
+      if (lowongan_id) {
+        const row = rows[0];
+        if (!row) return { widget: "galat" as const, pesan: "Lowongan itu tidak ditemukan di akunmu." };
+        return { widget: "draf_lowongan" as const, lowongan: kartuLowongan(row.lowongan, employer, { jumlah_lamaran: Number(row.jumlah) }) };
+      }
       return {
         widget: "lowongan_saya" as const,
         lowongan: rows.map((row) => kartuLowongan(row.lowongan, employer, { jumlah_lamaran: Number(row.jumlah) })),
@@ -310,8 +322,181 @@ export function createTools(db: Db, models: Models) {
     },
   });
 
+  // --- Alat dari ADR 0008 ---
+
+  const tanya_pengguna = createTool({
+    id: "tanya_pengguna",
+    description: [
+      "Bertanya kepada pengguna dengan pilihan jawaban yang tampil sebagai tombol besar. Pakai saat jawaban yang kamu butuhkan punya pilihan yang jelas,",
+      "misalnya shift (pagi/siang/malam), jenis upah, Persona mana yang dipakai, atau lowongan mana yang dimaksud.",
+      "Jangan pakai untuk isian bebas seperti nama, nomor, atau alamat; tanyakan itu biasa. Jangan pakai untuk konfirmasi aksi final.",
+      "Setelah memanggil alat ini, BERHENTI dan tunggu. Jawaban pengguna datang sebagai pesan berikutnya.",
+    ].join(" "),
+    inputSchema: z.object({
+      pertanyaan: z.string().min(3).max(140).describe("Satu pertanyaan pendek, misalnya 'Kamu bisa kerja jam berapa?'"),
+      pilihan: z
+        .array(
+          z.object({
+            label: z.string().min(1).max(40).describe("Teks tombol, singkat"),
+            keterangan: z.string().max(80).optional().describe("Penjelasan kecil di bawah tombol bila perlu"),
+          }),
+        )
+        .min(2)
+        .max(6),
+      boleh_banyak: z.boolean().optional().describe("true bila pengguna boleh memilih lebih dari satu"),
+      boleh_ketik: z.boolean().optional().describe("true bila pengguna boleh menjawab dengan kata-katanya sendiri"),
+    }),
+    execute: async (input) => ({
+      widget: "pertanyaan" as const,
+      id: randomUUID(),
+      pertanyaan: input.pertanyaan,
+      pilihan: input.pilihan,
+      boleh_banyak: input.boleh_banyak ?? false,
+      boleh_ketik: input.boleh_ketik ?? false,
+    }),
+  });
+
+  const ubah_cv_khusus = createTool({
+    id: "ubah_cv_khusus",
+    description:
+      "Merevisi CV Khusus yang sudah ada sesuai permintaan pengguna, misalnya 'ringkasan lebih pendek' atau 'tonjolkan pengalaman kasir'. Tetap hanya memakai Fakta terkonfirmasi; permintaan yang butuh isi baru diabaikan, jadi sarankan pengguna menceritakan pengalaman itu dulu.",
+    inputSchema: z.object({
+      cv_id: z.string().describe("ID CV Khusus dari hasil siapkan_cv_khusus"),
+      instruksi: z.string().min(3).max(300).describe("Permintaan pengguna dengan kata-katanya sendiri"),
+    }),
+    execute: async (input, context) => {
+      const user = currentUser(context.requestContext, "pencari");
+      return { widget: "cv_khusus" as const, ...(await revisiCvKhusus(db, models, user.id, input)) };
+    },
+  });
+
+  const kartu_kerja = createTool({
+    id: "kartu_kerja",
+    description:
+      "Menampilkan Kartu Kerja satu Persona beserta tautan untuk dibagikan, misalnya ke status WhatsApp. Tanpa persona_id, Persona pertama dipakai.",
+    inputSchema: z.object({ persona_id: z.string().optional() }),
+    execute: async ({ persona_id }, context) => {
+      const user = currentUser(context.requestContext, "pencari");
+      const persona = await db.query.personas.findFirst({
+        where: and(eq(personas.userId, user.id), ...(persona_id ? [eq(personas.id, persona_id)] : [])),
+      });
+      if (!persona) return { widget: "galat" as const, pesan: "Belum ada Persona. Ceritakan pengalaman kerjamu dulu supaya Kartu Kerja bisa dibuat." };
+      const pemilik = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+      return {
+        widget: "kartu_kerja" as const,
+        kartu: {
+          id: persona.id,
+          nama: pemilik?.name ?? "",
+          kota: pemilik?.district ?? pemilik?.city ?? "",
+          judul: persona.title,
+          ringkasan: persona.summary,
+          keahlian: persona.skills,
+          tautan: `${env.PUBLIC_WEB_URL}/kartu/${persona.id}`,
+        },
+      };
+    },
+  });
+
+  const siapkan_laporan = createTool({
+    id: "siapkan_laporan",
+    description:
+      "Menyiapkan laporan untuk Lowongan yang mencurigakan, misalnya meminta biaya di depan, upah tidak masuk akal, atau alamat tidak jelas. Laporan baru terkirim setelah pengguna mengetuk Kirim laporan di kartu.",
+    inputSchema: z.object({
+      lowongan_id: z.string(),
+      alasan: z.string().min(3).max(300).describe("Alasan dengan kata-kata pengguna, misalnya 'diminta bayar 200 ribu untuk seragam'"),
+    }),
+    execute: async ({ lowongan_id, alasan }) => {
+      const row = await db
+        .select({ lowongan, employer: employers })
+        .from(lowongan)
+        .innerJoin(employers, eq(employers.id, lowongan.employerId))
+        .where(eq(lowongan.id, lowongan_id))
+        .then((rows) => rows[0]);
+      if (!row) return { widget: "galat" as const, pesan: "Lowongan tidak ditemukan." };
+      return {
+        widget: "laporan_siap" as const,
+        lowongan: { id: row.lowongan.id, judul: row.lowongan.title, nama_usaha: row.employer.businessName },
+        alasan,
+      };
+    },
+  });
+
+  const lihat_kabar = createTool({
+    id: "lihat_kabar",
+    description: "Melihat Kabar terbaru pengguna (Lamaran masuk, Lamaran Lolos, Butuh Hari Ini di dekatnya) dan berapa yang belum dibaca.",
+    inputSchema: z.object({}),
+    execute: async (_input, context) => {
+      const user = currentUser(context.requestContext);
+      return { widget: "daftar_kabar" as const, ...(await daftarKabar(db, user.id, 10)) };
+    },
+  });
+
+  const lihat_pelamar = createTool({
+    id: "lihat_pelamar",
+    description:
+      "Membuka satu Lamaran yang masuk beserta Persona dan CV Khusus pelamar, dan menandainya Dilihat. Kontak pelamar tetap tersembunyi sampai Lolos. Dari kartunya pengguna bisa mengetuk Loloskan atau Tidak lolos.",
+    inputSchema: z.object({ lamaran_id: z.string().describe("ID Lamaran dari hasil lamaran_masuk") }),
+    execute: async ({ lamaran_id }, context) => {
+      const user = currentUser(context.requestContext, "pemberi");
+      return { widget: "pelamar" as const, lamaran: await tandaiDilihat(db, bus, user.id, lamaran_id) };
+    },
+  });
+
+  const siapkan_tahap = createTool({
+    id: "siapkan_tahap",
+    description: [
+      "Menyiapkan Tahap Berikutnya untuk satu pelamar: meloloskan Lamaran beserta instruksinya, atau menambah tahap untuk Lamaran yang sudah Lolos.",
+      "Contoh: 'loloskan Sari, suruh chat WA 0812...'. Kartu yang tampil berisi tombol Kirim ke pelamar; Lolos baru terjadi setelah pengguna mengetuknya.",
+      "Bila jenis atau rincian belum jelas, tanyakan dulu (boleh dengan tanya_pengguna untuk jenisnya).",
+    ].join(" "),
+    inputSchema: z.object({
+      lamaran_id: z.string(),
+      jenis: z.enum(["whatsapp", "meet", "alamat", "lainnya"]).describe("whatsapp: nomor WA; meet: tautan wawancara online; alamat: datang ke tempat"),
+      detail: z.string().min(3).max(300).describe("Nomor WhatsApp, tautan, atau alamat persis seperti disebut pengguna"),
+      jadwal: z.string().optional().describe("Waktu, format ISO 8601 bila disebut"),
+      catatan: z.string().max(300).optional().describe("Misalnya 'bawa KTP'"),
+    }),
+    execute: async ({ lamaran_id, ...tahap }, context) => {
+      const user = currentUser(context.requestContext, "pemberi");
+      const kartu = await lamaranUntuk(db, user.id, "pemberi", lamaran_id);
+      if (!kartu) return { widget: "galat" as const, pesan: "Lamaran tidak ditemukan." };
+      if (kartu.status === "tidak_lolos") return { widget: "galat" as const, pesan: "Lamaran ini sudah ditandai Tidak lolos." };
+      return {
+        widget: "tahap_siap" as const,
+        mode: kartu.status === "lolos" ? ("tambah" as const) : ("lolos" as const),
+        lamaran: kartu,
+        tahap,
+      };
+    },
+  });
+
   return {
-    pencari: { cari_lowongan, detail_lowongan, lihat_profil, usulkan_fakta, simpan_persona, siapkan_cv_khusus, siapkan_lamaran, status_lamaran },
-    pemberi: { buat_draf_lowongan, ubah_draf_lowongan, lowongan_saya, lamaran_masuk, cari_lowongan, detail_lowongan },
+    pencari: {
+      cari_lowongan,
+      detail_lowongan,
+      lihat_profil,
+      usulkan_fakta,
+      simpan_persona,
+      siapkan_cv_khusus,
+      ubah_cv_khusus,
+      siapkan_lamaran,
+      status_lamaran,
+      kartu_kerja,
+      siapkan_laporan,
+      lihat_kabar,
+      tanya_pengguna,
+    },
+    pemberi: {
+      buat_draf_lowongan,
+      ubah_draf_lowongan,
+      lowongan_saya,
+      lamaran_masuk,
+      lihat_pelamar,
+      siapkan_tahap,
+      cari_lowongan,
+      detail_lowongan,
+      lihat_kabar,
+      tanya_pengguna,
+    },
   };
 }
