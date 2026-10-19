@@ -16,7 +16,7 @@ const poinSchema = z.object({
 });
 
 const draftSchema = z.object({
-  judul: z.string().describe("Judul profesional singkat yang sesuai Lowongan, misalnya 'Juru Masak' atau 'UI/UX Designer'"),
+  judul: z.string().describe("Judul profesional singkat yang sesuai Lowongan, misalnya 'Juru Masak' atau 'UI/UX Designer'. Bukan 'Curriculum Vitae', 'CV', atau 'Resume'"),
   ringkasan: z
     .string()
     .describe("2-3 kalimat, hanya dari Fakta. Boleh **tebal** untuk 1-3 kata kunci yang dicari Lowongan."),
@@ -44,7 +44,7 @@ const draftSchema = z.object({
           periode: z.string().optional().describe("Periode dari Fakta, misalnya '2021 – sekarang'"),
           lokasi: z.string().optional(),
           fakta_ids: z.array(z.string()).describe("ID Fakta yang menjadi dasar entri ini; wajib minimal satu"),
-          poin: z.array(poinSchema).describe("0-4 poin dari detail Fakta"),
+          poin: z.array(poinSchema).describe("0-4 poin dari poin Fakta"),
         }),
       ),
     }),
@@ -79,7 +79,7 @@ async function muatSumber(db: Db, userId: string, personaId: string, lowonganId:
     .innerJoin(employers, eq(employers.id, lowongan.employerId))
     .where(eq(lowongan.id, lowonganId))
     .then((rows) => rows[0]);
-  if (!user || !persona) throw new HttpError(404, "persona_tidak_ada", "Persona tidak ditemukan.");
+  if (!user || !persona) throw new HttpError(404, "persona_tidak_ada", "Kerja yang dipilih tidak ditemukan.");
   if (!target) throw new HttpError(404, "lowongan_tidak_ada", "Lowongan tidak ditemukan.");
 
   const sumber = await db
@@ -96,7 +96,7 @@ async function muatSumber(db: Db, userId: string, personaId: string, lowonganId:
     throw new HttpError(
       400,
       "fakta_kosong",
-      "Belum ada Fakta terkonfirmasi untuk Persona ini. Ceritakan pengalamanmu dulu, lalu konfirmasi Faktanya.",
+      "Belum ada bahan CV untuk kerja ini. Ceritakan pengalamanmu dulu, lalu ketuk Simpan pada yang benar.",
     );
   }
   return { user, persona, target, fakta: sumber };
@@ -117,7 +117,7 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
         `  judul: ${item.title}`,
         item.place ? `  tempat: ${item.place}` : null,
         item.period ? `  periode: ${item.period}` : null,
-        item.detail ? `  detail: ${item.detail}` : null,
+        item.detail ? `  poin:\n${item.detail.split("\n").map((baris) => `    - ${baris}`).join("\n")}` : null,
       ]
         .filter(Boolean)
         .join("\n"),
@@ -146,12 +146,16 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
         : "BAHASA: tulis seluruh CV dalam Bahasa Indonesia, termasuk semua judul bagian (Pengalaman, Pendidikan, Proyek, Prestasi).",
       "Kamu menyusun CV Khusus untuk satu Lamaran di Lokerin, dengan gaya CV yang disukai perekrut: rapi, padat, dan mudah dipindai.",
       "ATURAN MUTLAK: hanya gunakan Fakta di daftar. Boleh meringkas, mengurutkan ulang, dan merapikan bahasa, tetapi DILARANG menambah pengalaman, angka, nama tempat, tanggal, atau keahlian yang tidak ada di Fakta.",
-      "Satu Fakta pengalaman, pendidikan, proyek, atau prestasi menjadi satu Entri: judul dari judul Fakta, tempat dari tempat Fakta, periode dari periode Fakta. Detail Fakta menjadi 1-4 poin.",
+      "Satu Fakta pengalaman, pendidikan, proyek, atau prestasi menjadi satu Entri: judul dari judul Fakta, tempat dari tempat Fakta, periode dari periode Fakta. Poin Fakta menjadi 1-4 poin Entri.",
       "Setiap Entri dan setiap poin wajib mencantumkan fakta_ids sumbernya, hanya di kolom fakta_ids. Jangan pernah menulis ID Fakta di dalam teks.",
       "Urutkan Entri dari yang paling relevan dengan Lowongan. Fakta yang tidak relevan boleh dilewati.",
       "Fakta keahlian masuk ke kelompok keahlian, bukan Entri. Kelompokkan per bidang (misalnya Desain, Riset, Alat), jangan menamai kelompok dengan nama satu alat.",
       ...(revisi
-        ? ["Ubah CV yang ada sesuai instruksi pengguna. Bila instruksi meminta isi yang tidak ada di Fakta, abaikan bagian itu dan jangan mengarangnya."]
+        ? [
+            "REVISI: ubah CV yang ada sesuai instruksi pengguna. Instruksi ini mengalahkan aturan susunan di atas: boleh menghapus bagian, memindahkan poin dari satu entri ke entri lain (misalnya dari Prestasi ke Pengalaman), menggabung atau memecah poin. ATURAN MUTLAK tetap berlaku.",
+            "Semua yang tidak disebut instruksi dibiarkan persis seperti CV saat ini, termasuk bahasa, urutan, dan isinya.",
+            "Bila instruksi meminta isi yang tidak ada di Fakta, abaikan bagian itu dan jangan mengarangnya.",
+          ]
         : []),
       bahasa === "en" ? "Fakta may be in Indonesian; translate faithfully without adding anything." : "Gunakan Bahasa Indonesia yang baku tetapi sederhana.",
     ].join("\n"),
@@ -229,7 +233,7 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
   const isi: IsiCv = {
     versi: 2,
     nama: user.name,
-    judul: rapikan(object.judul).replace(/^CV\s+/i, ""),
+    judul: judulCv(rapikan(object.judul).replace(/^CV\s+/i, ""), target.lowongan.title),
     kontak: { telepon: user.phone ?? undefined, email: user.email ?? undefined, kota: user.district ?? user.city },
     ringkasan: rapikan(object.ringkasan),
     keahlian: object.keahlian
@@ -240,6 +244,11 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
   };
   const faktaDipakai = new Set(bagianRapi.flatMap((section) => section.entri.flatMap((entri) => [...entri.fakta_ids, ...entri.poin.flatMap((poin) => poin.fakta_ids)]))).size;
   return { isi, bahasa, dibuang, faktaDipakai };
+}
+
+/** A CV headline names the work ("Marketing Intern"); a generic "Curriculum Vitae" falls back to the job. */
+function judulCv(judul: string, lowongan: string) {
+  return !judul || /^(curriculum vitae|cv|resume|résumé|riwayat hidup|daftar riwayat hidup)$/i.test(judul.trim()) ? lowongan : judul;
 }
 
 /**
@@ -283,9 +292,9 @@ export async function revisiCvKhusus(
   input: { cv_id: string; instruksi: string },
 ): Promise<HasilSiapkanCv> {
   const cv = await db.query.cvKhusus.findFirst({ where: and(eq(cvKhusus.id, input.cv_id), eq(cvKhusus.userId, userId)) });
-  if (!cv) throw new HttpError(404, "cv_tidak_ada", "CV Khusus tidak ditemukan.");
+  if (!cv) throw new HttpError(404, "cv_tidak_ada", "CV tidak ditemukan.");
   if (!cv.personaId || !cv.lowonganId) {
-    throw new HttpError(409, "cv_tanpa_sumber", "Persona atau Lowongan untuk CV ini sudah dihapus. Siapkan CV Khusus baru.");
+    throw new HttpError(409, "cv_tanpa_sumber", "Lowongan atau kerja untuk CV ini sudah dihapus. Susun CV lamaran baru.");
   }
   const sumber = await muatSumber(db, userId, cv.personaId, cv.lowonganId);
   const { isi, dibuang, faktaDipakai } = await susunIsi(models, sumber, { instruksi: input.instruksi, isi: normalisasiIsi(cv.isi) });
@@ -313,7 +322,7 @@ export async function simpanEditCv(
   input: { isi: IsiCv; template?: "satu_kolom" | "dua_kolom" },
 ) {
   const row = await db.query.cvKhusus.findFirst({ where: and(eq(cvKhusus.id, id), eq(cvKhusus.userId, userId)) });
-  if (!row) throw new HttpError(404, "cv_tidak_ada", "CV Khusus tidak ditemukan.");
+  if (!row) throw new HttpError(404, "cv_tidak_ada", "CV tidak ditemukan.");
   const awal = teksPerId(normalisasiIsi(row.isiAwal));
   const calonFakta: { item_id: string; text: string }[] = [];
   const isi: IsiCv = {

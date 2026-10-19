@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { AppContext } from "../context.js";
-import { cvKhusus, employers, lamaran, lowongan, type IsiCv } from "../db/schema.js";
+import { cvKhusus, employers, lamaran, lowongan, personas, type IsiCv } from "../db/schema.js";
 import { HttpError, requireUser, type SessionUser } from "../auth/session.js";
 import { siapkanCvKhusus, simpanEditCv } from "../cv/generate.js";
 import { renderCvHtml } from "../cv/template.js";
@@ -67,7 +67,7 @@ export async function cvRoutes(app: FastifyInstance, ctx: AppContext) {
    */
   async function access(user: SessionUser, id: string) {
     const cv = await db.query.cvKhusus.findFirst({ where: eq(cvKhusus.id, id) });
-    if (!cv) throw new HttpError(404, "cv_tidak_ada", "CV Khusus tidak ditemukan.");
+    if (!cv) throw new HttpError(404, "cv_tidak_ada", "CV tidak ditemukan.");
     if (cv.userId === user.id) return { cv, masked: false, owner: true };
     if (user.role === "pemberi") {
       const link = await db
@@ -79,8 +79,60 @@ export async function cvRoutes(app: FastifyInstance, ctx: AppContext) {
         .then((rows) => rows[0]);
       if (link) return { cv, masked: link.status !== "lolos", owner: false };
     }
-    throw new HttpError(404, "cv_tidak_ada", "CV Khusus tidak ditemukan.");
+    throw new HttpError(404, "cv_tidak_ada", "CV tidak ditemukan.");
   }
+
+  /**
+   * Semua CV Khusus milik pencari, terbaru dulu, untuk halaman Profil: untuk lowongan apa, dari
+   * Persona mana, dan apakah sudah dipakai melamar (beserta statusnya).
+   */
+  app.get("/cv", async (request) => {
+    const user = requireUser(request, "pencari");
+    const rows = await db
+      .select({
+        id: cvKhusus.id,
+        template: cvKhusus.template,
+        bahasa: cvKhusus.language,
+        isi: cvKhusus.isi,
+        dibuat: cvKhusus.createdAt,
+        diperbarui: cvKhusus.updatedAt,
+        personaId: personas.id,
+        personaJudul: personas.title,
+        lowonganId: lowongan.id,
+        lowonganJudul: lowongan.title,
+        usaha: employers.businessName,
+        lamaranId: lamaran.id,
+        lamaranStatus: lamaran.status,
+      })
+      .from(cvKhusus)
+      .leftJoin(personas, eq(personas.id, cvKhusus.personaId))
+      .leftJoin(lowongan, eq(lowongan.id, cvKhusus.lowonganId))
+      .leftJoin(employers, eq(employers.id, lowongan.employerId))
+      .leftJoin(lamaran, eq(lamaran.cvKhususId, cvKhusus.id))
+      .where(eq(cvKhusus.userId, user.id))
+      .orderBy(desc(cvKhusus.updatedAt))
+      .limit(30);
+    // One CV per job: the one sent with an application if there is one, otherwise the newest.
+    const perLowongan = new Map<string, (typeof rows)[number]>();
+    for (const r of rows) {
+      const kunci = r.lowonganId ?? r.id;
+      const ada = perLowongan.get(kunci);
+      if (!ada || (!ada.lamaranId && r.lamaranId)) perLowongan.set(kunci, r);
+    }
+    return {
+      cv: [...perLowongan.values()].map((r) => ({
+        id: r.id,
+        template: r.template,
+        bahasa: r.bahasa,
+        isi: normalisasiIsi(r.isi),
+        dibuat: r.dibuat.toISOString(),
+        diperbarui: r.diperbarui.toISOString(),
+        persona: r.personaId ? { id: r.personaId, judul: r.personaJudul } : null,
+        lowongan: r.lowonganId ? { id: r.lowonganId, judul: r.lowonganJudul, usaha: r.usaha } : null,
+        lamaran: r.lamaranId ? { id: r.lamaranId, status: r.lamaranStatus } : null,
+      })),
+    };
+  });
 
   app.post("/cv", async (request) => {
     const user = requireUser(request, "pencari");

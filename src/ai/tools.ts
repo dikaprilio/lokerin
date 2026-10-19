@@ -13,11 +13,46 @@ import { cariLowongan } from "../domain/matching.js";
 import { buatDraf, employerOf, ubahDraf, type IsiDraf } from "../domain/lowongan.js";
 import { profilInduk, simpanPersona, usulkanFakta } from "../domain/profil.js";
 import { lamaranMasuk, lamaranPencari, lamaranUntuk, tandaiDilihat } from "../domain/lamaran.js";
-import { revisiCvKhusus, siapkanCvKhusus } from "../cv/generate.js";
+import { revisiCvKhusus, siapkanCvKhusus, type HasilSiapkanCv } from "../cv/generate.js";
 import { daftarKabar } from "../kabar/kabar.js";
 import { kartuLowongan } from "../domain/serialize.js";
 
 export type LokerinRequestContext = { user: SessionUser; kanal: "teks" | "suara" };
+
+/**
+ * One request, one run per CV: the result is shown to the person first instead of being polished
+ * in a loop (each run used to draw its own card in the thread).
+ */
+function sekaliPerPermintaan(requestContext: RequestContext<unknown> | undefined, kunci: string) {
+  const rc = requestContext as RequestContext<Record<string, unknown>> | undefined;
+  let sudah = rc?.get("sudah_dikerjakan") as Set<string> | undefined;
+  if (!sudah) {
+    sudah = new Set();
+    rc?.set("sudah_dikerjakan", sudah);
+  }
+  if (sudah.has(kunci)) return false;
+  sudah.add(kunci);
+  return true;
+}
+
+const CV_SUDAH_DIUBAH = {
+  catatan: "CV ini sudah dikerjakan di permintaan ini dan hasilnya sudah tampil di layar. Jangan ubah lagi. Ringkas perubahannya dalam satu kalimat dan tanya apakah sudah pas.",
+};
+
+/** What the agent needs to talk about a CV, not the whole document (the card loads that itself). */
+function ringkasCv(h: HasilSiapkanCv) {
+  return {
+    widget: "cv_khusus" as const,
+    id: h.id,
+    isi: { judul: h.isi.judul, ringkasan: h.isi.ringkasan },
+    bagian: h.isi.bagian.map((b) => `${b.judul}: ${b.entri.map((e) => `${e.judul} (${e.poin.length} poin)`).join(", ")}`),
+    keahlian: h.isi.keahlian.map((k) => k.label),
+    bahasa: h.bahasa,
+    fakta_dipakai: h.fakta_dipakai,
+    poin_dibuang: h.poin_dibuang,
+    peringatan: h.peringatan,
+  };
+}
 
 function currentUser(requestContext: RequestContext<unknown> | undefined, role?: SessionUser["role"]) {
   const user = (requestContext as RequestContext<LokerinRequestContext> | undefined)?.get("user");
@@ -143,16 +178,25 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
   const usulkan_fakta = createTool({
     id: "usulkan_fakta",
     description:
-      "Mengusulkan Fakta baru dari cerita pengguna. Fakta BELUM tersimpan: pengguna harus mengetuk tombol konfirmasi di layar. Pecah cerita menjadi Fakta kecil dan spesifik; jangan menambah detail yang tidak diucapkan.",
+      "Mengusulkan Fakta baru dari cerita pengguna. Fakta BELUM tersimpan: pengguna harus mengetuk tombol konfirmasi di layar. " +
+      "Satu pekerjaan (satu posisi di satu tempat), satu pendidikan, atau satu proyek adalah SATU Fakta. Tugas, tanggung jawab, dan hasil di dalamnya " +
+      "(termasuk angka seperti target atau KPI) masuk ke `poin` Fakta itu, bukan Fakta terpisah. Jenis 'prestasi' hanya untuk penghargaan, juara, atau " +
+      "sertifikat yang berdiri sendiri; 'keahlian' hanya untuk kemampuan yang disebut sebagai kemampuan (alat, bahasa, mesin). Jangan menambah apa pun " +
+      "yang tidak diucapkan.",
     inputSchema: z.object({
       items: z
         .array(
           z.object({
             jenis: z.enum(["pengalaman", "keahlian", "pendidikan", "prestasi", "lainnya"]),
-            judul: z.string(),
-            detail: z.string().optional(),
-            tempat: z.string().optional(),
-            periode: z.string().optional().describe("Misalnya '2019–sekarang' atau '6 tahun'"),
+            judul: z.string().describe("Posisi atau nama, misalnya 'Marcomm Intern' atau 'Tukang las pagar'"),
+            tempat: z.string().optional().describe("Usaha, perusahaan, sekolah, atau organisasi"),
+            periode: z.string().optional().describe("Misalnya 'Jan–Jun 2026', '2019–sekarang', atau '6 tahun'"),
+            poin: z
+              .array(z.string())
+              .max(8)
+              .optional()
+              .describe("Tugas dan hasil di pengalaman ini, satu kalimat pendek per poin, dengan kata-kata pengguna"),
+            detail: z.string().optional().describe("Catatan lain yang bukan tugas atau hasil"),
           }),
         )
         .min(1)
@@ -200,7 +244,7 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
   const siapkan_cv_khusus = createTool({
     id: "siapkan_cv_khusus",
     description:
-      "Menyusun CV Khusus untuk satu Lowongan dari satu Persona, hanya dari Fakta terkonfirmasi. Hasilnya dibuka di editor; pengguna boleh mengedit lalu menyetujuinya.",
+      "Menyusun CV Khusus untuk satu Lowongan dari satu Persona, hanya dari Fakta terkonfirmasi. Hasilnya dibuka di editor; pengguna boleh mengedit lalu menyetujuinya. Panggil sekali per permintaan.",
     inputSchema: z.object({
       lowongan_id: z.string(),
       persona_id: z.string(),
@@ -208,7 +252,8 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
     }),
     execute: async (input, context) => {
       const user = currentUser(context.requestContext, "pencari");
-      return { widget: "cv_khusus" as const, ...(await siapkanCvKhusus(db, models, user.id, input)) };
+      if (!sekaliPerPermintaan(context.requestContext, `siapkan:${input.lowongan_id}:${input.persona_id}`)) return CV_SUDAH_DIUBAH;
+      return ringkasCv(await siapkanCvKhusus(db, models, user.id, input));
     },
   });
 
@@ -233,7 +278,7 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
       const persona = await db.query.personas.findFirst({
         where: and(eq(personas.id, input.persona_id), eq(personas.userId, user.id)),
       });
-      if (!target || !persona) return { widget: "galat" as const, pesan: "Lowongan atau Persona tidak ditemukan." };
+      if (!target || !persona) return { widget: "galat" as const, pesan: "Lowongan atau kerja yang dipilih tidak ditemukan." };
       const sudah = await db.query.lamaran.findFirst({
         where: and(eq(lamaran.lowonganId, input.lowongan_id), eq(lamaran.pencariId, user.id)),
       });
@@ -246,7 +291,7 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
         sudah_melamar: Boolean(sudah),
         peringatan:
           !input.cv_khusus_id && target.lowongan.segment === "magang"
-            ? "Lowongan magang biasanya membaca CV. Lamaranmu lebih kuat dengan CV Khusus."
+            ? "Lowongan magang biasanya membaca CV. Lamaranmu lebih kuat dengan CV lamaran."
             : null,
         tombol: { label: "Kirim Lamaran", method: "POST", path: "/lamaran" },
       };
@@ -327,46 +372,62 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
   const tanya_pengguna = createTool({
     id: "tanya_pengguna",
     description: [
-      "Bertanya kepada pengguna dengan pilihan jawaban yang tampil sebagai tombol besar. Pakai saat jawaban yang kamu butuhkan punya pilihan yang jelas,",
+      "Bertanya kepada pengguna dengan pilihan jawaban yang tampil sebagai tombol besar, satu pertanyaan per layar. Pakai saat jawaban yang kamu butuhkan punya pilihan yang jelas,",
       "misalnya shift (pagi/siang/malam), jenis upah, Persona mana yang dipakai, atau lowongan mana yang dimaksud.",
+      "Bila butuh beberapa jawaban seperti itu, tanyakan semuanya dalam SATU panggilan (1 sampai 3 pertanyaan), jangan satu per satu dalam beberapa giliran.",
+      "Taruh pilihan yang paling mungkin di urutan pertama. Jangan menambah pilihan 'Lainnya': tombol 'Jawab sendiri' selalu ada.",
       "Jangan pakai untuk isian bebas seperti nama, nomor, atau alamat; tanyakan itu biasa. Jangan pakai untuk konfirmasi aksi final.",
-      "Setelah memanggil alat ini, BERHENTI dan tunggu. Jawaban pengguna datang sebagai pesan berikutnya.",
+      "Setelah memanggil alat ini, BERHENTI dan tunggu. Semua jawaban datang sekaligus sebagai pesan berikutnya, satu baris per pertanyaan: 'Judul: jawaban'. Pengguna juga bisa melewatinya.",
     ].join(" "),
     inputSchema: z.object({
-      pertanyaan: z.string().min(3).max(140).describe("Satu pertanyaan pendek, misalnya 'Kamu bisa kerja jam berapa?'"),
-      pilihan: z
+      pertanyaan: z
         .array(
           z.object({
-            label: z.string().min(1).max(40).describe("Teks tombol, singkat"),
-            keterangan: z.string().max(80).optional().describe("Penjelasan kecil di bawah tombol bila perlu"),
+            judul: z.string().min(1).max(16).describe("Label sangat singkat untuk ringkasan jawaban, misalnya 'Shift' atau 'Mulai'"),
+            teks: z.string().min(3).max(140).describe("Pertanyaan pendek, misalnya 'Kamu bisa kerja jam berapa?'"),
+            pilihan: z
+              .array(
+                z.object({
+                  label: z.string().min(1).max(40).describe("Teks tombol, singkat"),
+                  keterangan: z.string().max(80).optional().describe("Penjelasan kecil di bawah tombol bila perlu"),
+                }),
+              )
+              .min(2)
+              .max(5),
+            boleh_banyak: z.boolean().optional().describe("true bila pengguna boleh memilih lebih dari satu"),
+            boleh_ketik: z.boolean().optional().describe("false hanya bila jawaban harus salah satu pilihan; bawaannya pengguna boleh menjawab sendiri"),
           }),
         )
-        .min(2)
-        .max(6),
-      boleh_banyak: z.boolean().optional().describe("true bila pengguna boleh memilih lebih dari satu"),
-      boleh_ketik: z.boolean().optional().describe("true bila pengguna boleh menjawab dengan kata-katanya sendiri"),
+        .min(1)
+        .max(3),
     }),
     execute: async (input) => ({
       widget: "pertanyaan" as const,
       id: randomUUID(),
-      pertanyaan: input.pertanyaan,
-      pilihan: input.pilihan,
-      boleh_banyak: input.boleh_banyak ?? false,
-      boleh_ketik: input.boleh_ketik ?? false,
+      daftar: input.pertanyaan.map((p, i) => ({
+        id: `q${i + 1}`,
+        judul: p.judul,
+        teks: p.teks,
+        pilihan: p.pilihan,
+        boleh_banyak: p.boleh_banyak ?? false,
+        boleh_ketik: p.boleh_ketik ?? true,
+      })),
     }),
   });
 
   const ubah_cv_khusus = createTool({
     id: "ubah_cv_khusus",
     description:
-      "Merevisi CV Khusus yang sudah ada sesuai permintaan pengguna, misalnya 'ringkasan lebih pendek' atau 'tonjolkan pengalaman kasir'. Tetap hanya memakai Fakta terkonfirmasi; permintaan yang butuh isi baru diabaikan, jadi sarankan pengguna menceritakan pengalaman itu dulu.",
+      "Merevisi CV Khusus yang sudah ada sesuai permintaan pengguna, misalnya 'ringkasan lebih pendek' atau 'tonjolkan pengalaman kasir'. Tetap hanya memakai Fakta terkonfirmasi; permintaan yang butuh isi baru diabaikan, jadi sarankan pengguna menceritakan pengalaman itu dulu. " +
+      "Panggil SEKALI per permintaan pengguna dengan instruksi yang lengkap; hasilnya langsung tampil. Jangan memanggil ulang untuk menyempurnakan sendiri.",
     inputSchema: z.object({
       cv_id: z.string().describe("ID CV Khusus dari hasil siapkan_cv_khusus"),
       instruksi: z.string().min(3).max(300).describe("Permintaan pengguna dengan kata-katanya sendiri"),
     }),
     execute: async (input, context) => {
       const user = currentUser(context.requestContext, "pencari");
-      return { widget: "cv_khusus" as const, ...(await revisiCvKhusus(db, models, user.id, input)) };
+      if (!sekaliPerPermintaan(context.requestContext, `ubah:${input.cv_id}`)) return CV_SUDAH_DIUBAH;
+      return ringkasCv(await revisiCvKhusus(db, models, user.id, input));
     },
   });
 
@@ -380,7 +441,7 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
       const persona = await db.query.personas.findFirst({
         where: and(eq(personas.userId, user.id), ...(persona_id ? [eq(personas.id, persona_id)] : [])),
       });
-      if (!persona) return { widget: "galat" as const, pesan: "Belum ada Persona. Ceritakan pengalaman kerjamu dulu supaya Kartu Kerja bisa dibuat." };
+      if (!persona) return { widget: "galat" as const, pesan: "Lokerin belum tahu kamu bisa kerja apa. Ceritakan pengalaman kerjamu dulu supaya Kartu Kerja bisa dibuat." };
       const pemilik = await db.query.users.findFirst({ where: eq(users.id, user.id) });
       return {
         widget: "kartu_kerja" as const,

@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { AppContext } from "../context.js";
 import { personas, users } from "../db/schema.js";
 import { HttpError, requireUser } from "../auth/session.js";
-import { profilInduk, putuskanFakta, simpanPersona, tambahFaktaManual } from "../domain/profil.js";
+import { gabungFakta, hapusFakta, profilInduk, putuskanFakta, simpanPersona, tambahFaktaManual, ubahFakta } from "../domain/profil.js";
 import { idParam, parse } from "./util.js";
 
 const faktaSchema = z.object({
@@ -13,6 +13,15 @@ const faktaSchema = z.object({
   detail: z.string().max(1000).optional(),
   tempat: z.string().max(200).optional(),
   periode: z.string().max(80).optional(),
+  poin: z.array(z.string().max(300)).max(12).optional(),
+});
+
+const ubahFaktaSchema = z.object({
+  jenis: faktaSchema.shape.jenis.optional(),
+  judul: z.string().min(1).max(200).optional(),
+  tempat: z.string().max(200).nullable().optional(),
+  periode: z.string().max(80).nullable().optional(),
+  detail: z.string().max(3000).nullable().optional(),
 });
 
 const personaSchema = z.object({
@@ -44,6 +53,23 @@ export async function profilRoutes(app: FastifyInstance, ctx: AppContext) {
   });
 
   /** Aksi final: menyimpan atau menolak Fakta usulan AI lewat tombol (ADR 0004). */
+  /** Bahan CV milik sendiri bisa diubah, dihapus, atau digabung ke satu pengalaman. */
+  app.patch("/fakta/:id", async (request) => {
+    const user = requireUser(request, "pencari");
+    return ubahFakta(db, user.id, parse(idParam, request.params).id, parse(ubahFaktaSchema, request.body));
+  });
+
+  app.delete("/fakta/:id", async (request) => {
+    const user = requireUser(request, "pencari");
+    return hapusFakta(db, user.id, parse(idParam, request.params).id);
+  });
+
+  app.post("/fakta/:id/gabung", async (request) => {
+    const user = requireUser(request, "pencari");
+    const { ids } = parse(z.object({ ids: z.array(z.string().uuid()).min(1).max(20) }), request.body);
+    return gabungFakta(db, user.id, parse(idParam, request.params).id, ids);
+  });
+
   app.post("/fakta/putuskan", async (request) => {
     const user = requireUser(request, "pencari");
     const body = parse(z.object({ ids: z.array(z.string().uuid()).min(1).max(20), terima: z.boolean() }), request.body);
