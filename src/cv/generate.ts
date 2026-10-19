@@ -44,7 +44,7 @@ const draftSchema = z.object({
           periode: z.string().optional().describe("Periode dari Fakta, misalnya '2021 – sekarang'"),
           lokasi: z.string().optional(),
           fakta_ids: z.array(z.string()).describe("ID Fakta yang menjadi dasar entri ini; wajib minimal satu"),
-          poin: z.array(poinSchema).describe("0-4 poin dari detail Fakta"),
+          poin: z.array(poinSchema).describe("0-4 poin dari poin Fakta"),
         }),
       ),
     }),
@@ -117,7 +117,7 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
         `  judul: ${item.title}`,
         item.place ? `  tempat: ${item.place}` : null,
         item.period ? `  periode: ${item.period}` : null,
-        item.detail ? `  detail: ${item.detail}` : null,
+        item.detail ? `  poin:\n${item.detail.split("\n").map((baris) => `    - ${baris}`).join("\n")}` : null,
       ]
         .filter(Boolean)
         .join("\n"),
@@ -146,7 +146,7 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
         : "BAHASA: tulis seluruh CV dalam Bahasa Indonesia, termasuk semua judul bagian (Pengalaman, Pendidikan, Proyek, Prestasi).",
       "Kamu menyusun CV Khusus untuk satu Lamaran di Lokerin, dengan gaya CV yang disukai perekrut: rapi, padat, dan mudah dipindai.",
       "ATURAN MUTLAK: hanya gunakan Fakta di daftar. Boleh meringkas, mengurutkan ulang, dan merapikan bahasa, tetapi DILARANG menambah pengalaman, angka, nama tempat, tanggal, atau keahlian yang tidak ada di Fakta.",
-      "Satu Fakta pengalaman, pendidikan, proyek, atau prestasi menjadi satu Entri: judul dari judul Fakta, tempat dari tempat Fakta, periode dari periode Fakta. Detail Fakta menjadi 1-4 poin.",
+      "Satu Fakta pengalaman, pendidikan, proyek, atau prestasi menjadi satu Entri: judul dari judul Fakta, tempat dari tempat Fakta, periode dari periode Fakta. Poin Fakta menjadi 1-4 poin Entri.",
       "Setiap Entri dan setiap poin wajib mencantumkan fakta_ids sumbernya, hanya di kolom fakta_ids. Jangan pernah menulis ID Fakta di dalam teks.",
       "Urutkan Entri dari yang paling relevan dengan Lowongan. Fakta yang tidak relevan boleh dilewati.",
       "Fakta keahlian masuk ke kelompok keahlian, bukan Entri. Kelompokkan per bidang (misalnya Desain, Riset, Alat), jangan menamai kelompok dengan nama satu alat.",
