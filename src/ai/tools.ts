@@ -143,16 +143,25 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
   const usulkan_fakta = createTool({
     id: "usulkan_fakta",
     description:
-      "Mengusulkan Fakta baru dari cerita pengguna. Fakta BELUM tersimpan: pengguna harus mengetuk tombol konfirmasi di layar. Pecah cerita menjadi Fakta kecil dan spesifik; jangan menambah detail yang tidak diucapkan.",
+      "Mengusulkan Fakta baru dari cerita pengguna. Fakta BELUM tersimpan: pengguna harus mengetuk tombol konfirmasi di layar. " +
+      "Satu pekerjaan (satu posisi di satu tempat), satu pendidikan, atau satu proyek adalah SATU Fakta. Tugas, tanggung jawab, dan hasil di dalamnya " +
+      "(termasuk angka seperti target atau KPI) masuk ke `poin` Fakta itu, bukan Fakta terpisah. Jenis 'prestasi' hanya untuk penghargaan, juara, atau " +
+      "sertifikat yang berdiri sendiri; 'keahlian' hanya untuk kemampuan yang disebut sebagai kemampuan (alat, bahasa, mesin). Jangan menambah apa pun " +
+      "yang tidak diucapkan.",
     inputSchema: z.object({
       items: z
         .array(
           z.object({
             jenis: z.enum(["pengalaman", "keahlian", "pendidikan", "prestasi", "lainnya"]),
-            judul: z.string(),
-            detail: z.string().optional(),
-            tempat: z.string().optional(),
-            periode: z.string().optional().describe("Misalnya '2019–sekarang' atau '6 tahun'"),
+            judul: z.string().describe("Posisi atau nama, misalnya 'Marcomm Intern' atau 'Tukang las pagar'"),
+            tempat: z.string().optional().describe("Usaha, perusahaan, sekolah, atau organisasi"),
+            periode: z.string().optional().describe("Misalnya 'Jan–Jun 2026', '2019–sekarang', atau '6 tahun'"),
+            poin: z
+              .array(z.string())
+              .max(8)
+              .optional()
+              .describe("Tugas dan hasil di pengalaman ini, satu kalimat pendek per poin, dengan kata-kata pengguna"),
+            detail: z.string().optional().describe("Catatan lain yang bukan tugas atau hasil"),
           }),
         )
         .min(1)
