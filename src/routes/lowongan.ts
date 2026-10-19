@@ -11,6 +11,7 @@ import { kartuLowongan } from "../domain/serialize.js";
 import { kirimKabar, penerimaButuhHariIni } from "../kabar/kabar.js";
 import { buatKunciPeta } from "../peta/kunci.js";
 import { idParam, parse } from "./util.js";
+import { ingat } from "../http/cache.js";
 
 const jenisUpah = z.enum(["harian", "mingguan", "bulanan", "borongan", "per_jam"]);
 
@@ -122,8 +123,8 @@ export async function lowonganRoutes(app: FastifyInstance, ctx: AppContext) {
     return kunciPeta();
   });
 
-  /** Penghitung di halaman utama. */
-  app.get("/lowongan/statistik", async () => {
+  /** Penghitung di halaman utama. Empat hitungan yang sama untuk semua orang, jadi diingat 30 detik. */
+  const statistik = ingat(30_000, async () => {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const [terbit] = await db.select({ n: count() }).from(lowongan).where(eq(lowongan.status, "terbit"));
@@ -143,6 +144,7 @@ export async function lowonganRoutes(app: FastifyInstance, ctx: AppContext) {
       pemberi_kerja_terverifikasi: Number(terverifikasi?.n ?? 0),
     };
   });
+  app.get("/lowongan/statistik", async () => statistik());
 
   app.get("/lowongan/:id", async (request) => {
     const { id } = parse(idParam, request.params);

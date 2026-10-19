@@ -20,6 +20,7 @@ import { cvRoutes } from "./routes/cv.js";
 import { chatRoutes } from "./routes/chat.js";
 import { kabarRoutes } from "./routes/kabar.js";
 import { aturPush } from "./kabar/push.js";
+import { pasangCacheHttp } from "./http/cache.js";
 
 export async function buildApp(env: Env) {
   const app = Fastify({
@@ -50,6 +51,8 @@ export async function buildApp(env: Env) {
     timeWindow: "1 minute",
     allowList: (request) => request.url.startsWith("/events") || request.url === "/healthz",
   });
+
+  pasangCacheHttp(app);
 
   app.decorateRequest("user", null);
   app.addHook("onRequest", async (request) => {
