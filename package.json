@@ -11,6 +11,7 @@
     "build": "tsc -p tsconfig.json && node -e \"const fs=require('fs');fs.cpSync('src/seed/data','dist/seed/data',{recursive:true});fs.cpSync('src/cv/fonts','dist/cv/fonts',{recursive:true})\"",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test 'src/**/*.test.ts'",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file=.env src/db/migrate.ts",
     "db:seed": "tsx --env-file=.env src/seed/index.ts",
