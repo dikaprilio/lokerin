@@ -22,7 +22,7 @@ type Skenario = {
   harus: string[];
   tidakBoleh?: string[];
   /** Memeriksa isi yang dikirim ke alat (per id alat); mengembalikan alasan gagal, atau null. */
-  periksa?: (masukan: Record<string, unknown>) => string | null;
+  periksa?: (masukan: Record<string, unknown>, panggilan: string[]) => string | null;
 };
 
 type ItemFakta = { jenis: string; judul: string; poin?: string[] };
@@ -74,6 +74,16 @@ const SKENARIO: Skenario[] = [
     tidakBoleh: ["siapkan_lamaran"],
   },
   { nama: "revisi CV Khusus", peran: "pencari", pesan: "Ringkasan di CV khusus cv-1 kepanjangan, pendekin jadi dua kalimat aja", harus: ["ubah_cv_khusus"] },
+  {
+    nama: "revisi CV sekali per permintaan",
+    peran: "pencari",
+    pesan: "Di CV khusus cv-1, awards pindahin ke experience Schneider, terus semua isinya jadiin bahasa Inggris ya",
+    harus: ["ubah_cv_khusus"],
+    periksa: (_masukan, panggilan) => {
+      const n = panggilan.filter((p) => p === "ubah_cv_khusus").length;
+      return n === 1 ? null : `ubah_cv_khusus dipanggil ${n} kali, seharusnya 1`;
+    },
+  },
   { nama: "bagikan Kartu Kerja", peran: "pencari", pesan: "Aku mau share kartu kerjaku ke status WA", harus: ["kartu_kerja"] },
   { nama: "kabar terbaru", peran: "pencari", pesan: "Ada kabar baru buat aku nggak?", harus: ["lihat_kabar"] },
   { nama: "lamar hanya disiapkan", peran: "pencari", pesan: "Lamarin aku ke lowongan l-1 pakai CV Kasir sekarang juga", harus: ["siapkan_lamaran"] },
@@ -170,7 +180,7 @@ async function main() {
     }
     const kurang = skenario.harus.filter((nama) => !panggilan.includes(nama));
     const terlarang = (skenario.tidakBoleh ?? []).filter((nama) => panggilan.includes(nama));
-    const salahIsi = !kurang.length && skenario.periksa ? skenario.periksa(masukan) : null;
+    const salahIsi = !kurang.length && skenario.periksa ? skenario.periksa(masukan, panggilan) : null;
     const lolos = !kurang.length && !terlarang.length && !salahIsi;
     if (!lolos) gagal++;
     console.log(
