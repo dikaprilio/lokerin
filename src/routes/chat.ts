@@ -125,6 +125,15 @@ export async function chatRoutes(app: FastifyInstance, ctx: AppContext, memory: 
     return live.open(user, body.sdp, threadId);
   });
 
+  /** Jawaban yang diketuk atau teks yang diketik selama panggilan suara. */
+  app.post("/suara/sesi/:id/teks", async (request, reply) => {
+    const user = requireUser(request);
+    const { id } = parse(z.object({ id: z.string().min(1).max(200) }), request.params);
+    const { teks } = parse(z.object({ teks: z.string().trim().min(1).max(1000) }), request.body);
+    live.teks(user, id, teks);
+    return reply.code(202).send({ ok: true });
+  });
+
   app.delete("/suara/sesi/:id", async (request) => {
     const user = requireUser(request);
     const { id } = parse(z.object({ id: z.string().min(1).max(200) }), request.params);
