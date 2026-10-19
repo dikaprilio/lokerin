@@ -9,6 +9,7 @@ import { cariLowongan, embedLowongan, lowonganDiSekitar } from "../domain/matchi
 import { buatDraf, employerOf, periksaUlang, ubahDraf, type IsiDraf } from "../domain/lowongan.js";
 import { kartuLowongan } from "../domain/serialize.js";
 import { kirimKabar, penerimaButuhHariIni } from "../kabar/kabar.js";
+import { buatKunciPeta } from "../peta/kunci.js";
 import { idParam, parse } from "./util.js";
 
 const jenisUpah = z.enum(["harian", "mingguan", "bulanan", "borongan", "per_jam"]);
@@ -112,6 +113,13 @@ export async function lowonganRoutes(app: FastifyInstance, ctx: AppContext) {
       radius_km: query.radius_km,
       lowongan: await lowonganDiSekitar(db, query.lat, query.lng, query.radius_km, { butuhHariIni: query.butuh_hari_ini === "true" }),
     };
+  });
+
+  /** Token Mapbox sementara baca-saja untuk peta di browser; tanpa token rahasia, frontend memakai peta ilustrasi. */
+  const kunciPeta = buatKunciPeta(ctx.env, app.log);
+  app.get("/peta/kunci", async (_request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return kunciPeta();
   });
 
   /** Penghitung di halaman utama. */

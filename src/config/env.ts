@@ -25,6 +25,11 @@ const schema = z.object({
   /** Kunci VAPID untuk Web Push (npx web-push generate-vapid-keys). Kosong berarti Kabar hanya tampil di aplikasi. */
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
+  /**
+   * Token rahasia Mapbox (sk.*) dengan izin tokens:write. Tidak pernah dikirim ke browser: server
+   * memakainya untuk membuat token sementara baca-saja untuk peta (lihat src/peta/kunci.ts).
+   */
+  MAPBOX_SECRET_TOKEN: z.string().optional(),
   /** Kontak untuk layanan push: "mailto:..." atau URL https. */
   VAPID_SUBJECT: z.string().optional(),
   OPENROUTER_API_KEY: z.string().min(1),
