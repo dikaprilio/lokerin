@@ -17,8 +17,21 @@ SINI="$(cd "$(dirname "$0")" && pwd)"
 ADMIN="${SUDO_USER:-lokerin}"
 PG=18
 export DEBIAN_FRONTEND=noninteractive
+# Saat upgrade paket, needrestart hanya mendaftar layanan yang perlu restart, tidak me-restart sendiri.
+export NEEDRESTART_MODE=l
 
 langkah() { printf '\n== %s\n' "$*"; }
+# Tulis stdin ke $1 hanya bila isinya berbeda. Berhasil (0) bila berkas berubah, supaya layanan
+# hanya di-restart bila konfigurasinya benar-benar berubah. Menjalankan ulang skrip ini tidak
+# memutus API bila tidak ada yang berubah.
+pasang() {
+  local baru
+  baru="$(mktemp)"
+  cat > "$baru"
+  if [ -f "$1" ] && cmp -s "$baru" "$1"; then rm -f "$baru"; return 1; fi
+  install -m 644 "$baru" "$1"
+  rm -f "$baru"
+}
 
 langkah "Paket dasar"
 apt-get update -q
@@ -51,10 +64,10 @@ if ! command -v docker >/dev/null; then
   apt-get install -yq docker-ce docker-ce-cli containerd.io
 fi
 # Log container dibatasi agar disk 40 GB tidak penuh.
-cat > /etc/docker/daemon.json <<'EOF'
+if pasang /etc/docker/daemon.json <<'EOF'
 { "log-driver": "json-file", "log-opts": { "max-size": "20m", "max-file": "3" } }
 EOF
-systemctl restart docker
+then systemctl restart docker; fi
 
 langkah "Caddy"
 if ! command -v caddy >/dev/null; then
@@ -75,7 +88,7 @@ if [ ! -d "/usr/lib/postgresql/$PG" ]; then
   apt-get install -yq "postgresql-$PG" "postgresql-$PG-postgis-3" "postgresql-$PG-pgvector"
 fi
 # Hanya localhost: API memakai jaringan host, jadi tidak ada port Postgres yang terbuka.
-cat > "/etc/postgresql/$PG/main/conf.d/lokerin.conf" <<'EOF'
+if pasang "/etc/postgresql/$PG/main/conf.d/lokerin.conf" <<'EOF'
 listen_addresses = 'localhost'
 shared_buffers = 512MB
 effective_cache_size = 1536MB
@@ -83,7 +96,7 @@ work_mem = 8MB
 maintenance_work_mem = 128MB
 max_connections = 50
 EOF
-systemctl restart postgresql
+then systemctl restart postgresql; fi
 
 langkah "Berkas env backend"
 install -d -m 750 -o root -g root /etc/lokerin
@@ -143,6 +156,18 @@ echo "command=\"/usr/local/bin/lokerin-deploy\",restrict $KUNCI_DEPLOY" > /home/
 chown deploy:deploy /home/deploy/.ssh/authorized_keys
 chmod 600 /home/deploy/.ssh/authorized_keys
 
+langkah "Akses tim"
+# lokerin-ssh: boleh login SSH. lokerin-admin: sudo tanpa sandi (login tetap hanya dengan kunci).
+# Anggota baru: sudo lokerin-tambah-admin <nama> "<kunci publik>".
+getent group lokerin-ssh >/dev/null || groupadd lokerin-ssh
+getent group lokerin-admin >/dev/null || groupadd lokerin-admin
+usermod -aG lokerin-ssh,lokerin-admin "$ADMIN"
+usermod -aG lokerin-ssh deploy
+echo '%lokerin-admin ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/lokerin-admin
+chmod 440 /etc/sudoers.d/lokerin-admin
+visudo -cq
+install -m 755 -o root -g root "$SINI/tambah-admin.sh" /usr/local/bin/lokerin-tambah-admin
+
 langkah "SSH: hanya kunci, tanpa root"
 [ -s "/home/$ADMIN/.ssh/authorized_keys" ] || { echo "$ADMIN belum punya authorized_keys, SSH tidak diubah agar tidak terkunci" >&2; exit 1; }
 # Nama 00- supaya menang dari 50-cloud-init.conf (sshd memakai nilai pertama yang ditemukan).
@@ -150,7 +175,7 @@ cat > /etc/ssh/sshd_config.d/00-lokerin.conf <<EOF
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
-AllowUsers $ADMIN deploy
+AllowGroups lokerin-ssh
 MaxAuthTries 3
 X11Forwarding no
 EOF
