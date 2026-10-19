@@ -1,5 +1,5 @@
 import type { HasilPemeriksaan, JenisUpah } from "../db/schema.js";
-import { acuanUpah, formatRupiah, penuhWaktu, perkiraanBulanan } from "./upah.js";
+import { acuanUpah, formatRupiah, paruhWaktu, penuhWaktu, perkiraanBulanan, umkPerJam, upahPerJam } from "./upah.js";
 
 export type DrafUntukDiperiksa = {
   title: string | null;
@@ -59,12 +59,21 @@ export function periksaDraf(draf: DrafUntukDiperiksa): HasilPemeriksaan {
   }
 
   const acuan = acuanUpah();
-  const bulanan = perkiraanBulanan(draf);
-  if (acuan && bulanan && draf.segment === "informal") {
-    if (penuhWaktu(draf) && bulanan < acuan.umk_bulanan) {
+  if (acuan && draf.segment === "informal") {
+    const bulanan = perkiraanBulanan(draf);
+    if (bulanan && penuhWaktu(draf) && bulanan < acuan.umk_bulanan) {
       peringatan(
         "upah_rendah",
         `Untuk kerja penuh waktu, upah ini setara sekitar ${formatRupiah(bulanan)} per bulan, di bawah UMK ${acuan.kabupaten} ${acuan.tahun} (${formatRupiah(acuan.umk_bulanan)}). Usaha mikro dan kecil punya ketentuan upah sendiri, jadi ini bukan vonis. Mohon pastikan jam kerja, makan, atau tunjangan lain sudah ditulis, atau sesuaikan upahnya.`,
+        "payMin",
+      );
+    }
+    // Kerja paruh waktu dibandingkan per jam: Rp30.000 untuk 17.00–22.00 tidak tertangkap perbandingan bulanan.
+    const perJam = paruhWaktu(draf) ? upahPerJam(draf) : null;
+    if (perJam && perJam < umkPerJam(acuan)) {
+      peringatan(
+        "upah_rendah",
+        `Untuk kerja paruh waktu, upah ini setara sekitar ${formatRupiah(perJam)} per jam, di bawah patokan dari UMK ${acuan.kabupaten} ${acuan.tahun}, yaitu ${formatRupiah(umkPerJam(acuan))} per jam (UMK dibagi 126 jam). Usaha mikro dan kecil punya ketentuan upah sendiri, jadi ini bukan vonis. Mohon pastikan jam kerja, makan, atau tunjangan lain sudah ditulis, atau sesuaikan upahnya.`,
         "payMin",
       );
     }

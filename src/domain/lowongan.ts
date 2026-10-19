@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { employers, lowongan, type JenisUpah } from "../db/schema.js";
 import { HttpError } from "../auth/session.js";
+import { batasButuhHariIni } from "./jadwal.js";
 import { periksaDraf } from "./pemeriksaan.js";
 import { kartuLowongan } from "./serialize.js";
 
@@ -64,6 +65,20 @@ function toColumns(isi: IsiDraf) {
   return columns;
 }
 
+/**
+ * Butuh Hari Ini tanpa kata "mendadak": draf yang mulai hari ini ditandai sampai jam kerjanya
+ * (batasButuhHariIni). Batas yang disebut sendiri (urgentHours, juga dari formulir) selalu menang, dan
+ * tanda yang masih berlaku tidak diubah. Hanya tanggal mulai yang baru atau berubah yang dihitung, jadi
+ * revisi yang mengirim ulang tanggal yang sama tidak memasang lagi tanda yang sudah dihapus.
+ * Undefined berarti kolomnya tidak disentuh.
+ */
+function butuhHariIniDariMulai(isi: IsiDraf, sebelumnya?: typeof lowongan.$inferSelect) {
+  if (isi.urgentHours !== undefined || !isi.startDate || isi.startDate === sebelumnya?.startDate) return undefined;
+  const sekarang = new Date();
+  if (sebelumnya?.urgentUntil && sebelumnya.urgentUntil > sekarang) return undefined;
+  return batasButuhHariIni(isi.startDate, isi.hoursText ?? sebelumnya?.hoursText, sekarang) ?? undefined;
+}
+
 function periksa(row: typeof lowongan.$inferSelect) {
   return periksaDraf({
     title: row.title,
@@ -85,6 +100,7 @@ function periksa(row: typeof lowongan.$inferSelect) {
 
 export async function buatDraf(db: Db, userId: string, isi: IsiDraf) {
   const employer = await employerOf(db, userId);
+  const butuhHariIni = butuhHariIniDariMulai(isi);
   const [created] = await db
     .insert(lowongan)
     .values({
@@ -97,6 +113,7 @@ export async function buatDraf(db: Db, userId: string, isi: IsiDraf) {
       lat: isi.lat ?? employer.lat,
       lng: isi.lng ?? employer.lng,
       ...toColumns({ ...isi, city: isi.city ?? employer.city }),
+      ...(butuhHariIni ? { urgentUntil: butuhHariIni } : {}),
       status: "draf",
     })
     .returning();
@@ -115,9 +132,10 @@ export async function ubahDraf(db: Db, userId: string, id: string, isi: IsiDraf)
   if (current.status !== "draf") {
     throw new HttpError(409, "sudah_terbit", "Lowongan yang sudah Terbit tidak bisa diubah lewat draf.");
   }
+  const butuhHariIni = butuhHariIniDariMulai(isi, current);
   const [updated] = await db
     .update(lowongan)
-    .set({ ...toColumns(isi), updatedAt: new Date() })
+    .set({ ...toColumns(isi), ...(butuhHariIni ? { urgentUntil: butuhHariIni } : {}), updatedAt: new Date() })
     .where(eq(lowongan.id, id))
     .returning();
   if (!updated) throw new Error("Draf gagal diubah");
