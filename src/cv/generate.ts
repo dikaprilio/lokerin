@@ -34,25 +34,23 @@ export type HasilSiapkanCv = {
   peringatan: string | null;
 };
 
-/**
- * Menyusun CV Khusus dari Fakta terkonfirmasi milik satu Persona (ADR 0003, 0006).
- * Setiap poin wajib menunjuk ke Fakta asal; poin tanpa Fakta yang sah dibuang.
- */
-export async function siapkanCvKhusus(
-  db: Db,
-  models: Models,
-  userId: string,
-  input: { lowongan_id: string; persona_id: string; template?: "satu_kolom" | "dua_kolom" },
-): Promise<HasilSiapkanCv> {
+type Sumber = {
+  user: typeof users.$inferSelect;
+  persona: typeof personas.$inferSelect;
+  target: { lowongan: typeof lowongan.$inferSelect; employer: typeof employers.$inferSelect };
+  fakta: (typeof fakta.$inferSelect)[];
+};
+
+async function muatSumber(db: Db, userId: string, personaId: string, lowonganId: string): Promise<Sumber> {
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
   const persona = await db.query.personas.findFirst({
-    where: and(eq(personas.id, input.persona_id), eq(personas.userId, userId)),
+    where: and(eq(personas.id, personaId), eq(personas.userId, userId)),
   });
   const target = await db
     .select({ lowongan, employer: employers })
     .from(lowongan)
     .innerJoin(employers, eq(employers.id, lowongan.employerId))
-    .where(eq(lowongan.id, input.lowongan_id))
+    .where(eq(lowongan.id, lowonganId))
     .then((rows) => rows[0]);
   if (!user || !persona) throw new HttpError(404, "persona_tidak_ada", "Persona tidak ditemukan.");
   if (!target) throw new HttpError(404, "lowongan_tidak_ada", "Lowongan tidak ditemukan.");
@@ -74,11 +72,27 @@ export async function siapkanCvKhusus(
       "Belum ada Fakta terkonfirmasi untuk Persona ini. Ceritakan pengalamanmu dulu, lalu konfirmasi Faktanya.",
     );
   }
+  return { user, persona, target, fakta: sumber };
+}
 
+/**
+ * Inti penyusunan: model hanya boleh memakai Fakta di daftar, dan poin tanpa Fakta yang sah dibuang.
+ * Dengan `revisi`, CV yang ada diubah sesuai instruksi pengguna dengan aturan yang sama.
+ */
+async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: string; isi: IsiCv }) {
+  const { user, persona, target } = sumber;
   const bahasa = target.lowongan.language;
-  const daftarFakta = sumber
+  const daftarFakta = sumber.fakta
     .map((item) => `- [${item.id}] (${item.kind}) ${item.title}${item.place ? ` di ${item.place}` : ""}${item.period ? `, ${item.period}` : ""}${item.detail ? `: ${item.detail}` : ""}`)
     .join("\n");
+  const cvSekarang = revisi
+    ? [
+        `Judul: ${revisi.isi.judul}`,
+        `Ringkasan: ${revisi.isi.ringkasan}`,
+        `Keahlian: ${revisi.isi.keahlian.join(", ")}`,
+        ...revisi.isi.bagian.map((bagian) => `${bagian.judul}:\n${bagian.items.map((item) => `- ${item.text}`).join("\n")}`),
+      ].join("\n")
+    : "";
 
   const { object } = await generateObject({
     model: models.chat("none"),
@@ -88,6 +102,9 @@ export async function siapkanCvKhusus(
       "ATURAN MUTLAK: hanya gunakan Fakta di daftar. Boleh meringkas, mengurutkan ulang, dan merapikan bahasa, tetapi DILARANG menambah pengalaman, angka, nama tempat, atau keahlian yang tidak ada di Fakta.",
       "Setiap poin wajib mencantumkan fakta_ids yang menjadi sumbernya.",
       "Utamakan Fakta yang paling relevan dengan Lowongan; Fakta yang tidak relevan boleh diringkas atau tidak dipakai.",
+      ...(revisi
+        ? ["Ubah CV yang ada sesuai instruksi pengguna. Bila instruksi meminta isi yang tidak ada di Fakta, abaikan bagian itu dan jangan mengarangnya."]
+        : []),
       bahasa === "en" ? "Tulis CV dalam bahasa Inggris." : "Tulis CV dalam Bahasa Indonesia yang baku tetapi sederhana.",
     ].join("\n"),
     prompt: [
@@ -97,10 +114,11 @@ export async function siapkanCvKhusus(
       `Persona: ${persona.title}. ${persona.summary}`,
       "Fakta:",
       daftarFakta,
+      ...(revisi ? ["", "CV saat ini:", cvSekarang, "", `Instruksi pengguna: ${revisi.instruksi}`] : []),
     ].join("\n"),
   });
 
-  const sah = new Set(sumber.map((item) => item.id));
+  const sah = new Set(sumber.fakta.map((item) => item.id));
   let dibuang = 0;
   const bagian = object.bagian
     .map((section) => ({
@@ -125,11 +143,26 @@ export async function siapkanCvKhusus(
     keahlian: object.keahlian.slice(0, 12),
     bagian,
   };
+  const faktaDipakai = new Set(bagian.flatMap((section) => section.items.flatMap((item) => item.fakta_ids))).size;
+  return { isi, bahasa, dibuang, faktaDipakai };
+}
 
+/**
+ * Menyusun CV Khusus dari Fakta terkonfirmasi milik satu Persona (ADR 0003, 0006).
+ * Setiap poin wajib menunjuk ke Fakta asal; poin tanpa Fakta yang sah dibuang.
+ */
+export async function siapkanCvKhusus(
+  db: Db,
+  models: Models,
+  userId: string,
+  input: { lowongan_id: string; persona_id: string; template?: "satu_kolom" | "dua_kolom" },
+): Promise<HasilSiapkanCv> {
+  const sumber = await muatSumber(db, userId, input.persona_id, input.lowongan_id);
+  const { isi, bahasa, dibuang, faktaDipakai } = await susunIsi(models, sumber);
   const template = input.template ?? "satu_kolom";
   const [row] = await db
     .insert(cvKhusus)
-    .values({ userId, personaId: persona.id, lowonganId: target.lowongan.id, template, language: bahasa, isi, isiAwal: isi })
+    .values({ userId, personaId: sumber.persona.id, lowonganId: sumber.target.lowongan.id, template, language: bahasa, isi, isiAwal: isi })
     .returning();
   if (!row) throw new Error("CV Khusus gagal disimpan");
   return {
@@ -137,9 +170,39 @@ export async function siapkanCvKhusus(
     isi,
     template,
     bahasa,
-    fakta_dipakai: new Set(bagian.flatMap((section) => section.items.flatMap((item) => item.fakta_ids))).size,
+    fakta_dipakai: faktaDipakai,
     poin_dibuang: dibuang,
     peringatan: template === "dua_kolom" ? "Templat dua kolom kurang ramah ATS." : null,
+  };
+}
+
+/**
+ * Merevisi CV Khusus dengan instruksi dari obrolan, misalnya "ringkasan lebih pendek" (ADR 0008).
+ * Aturannya sama dengan penyusunan awal: hanya Fakta terkonfirmasi. Versi AI baru menjadi acuan
+ * untuk menandai edit manual berikutnya.
+ */
+export async function revisiCvKhusus(
+  db: Db,
+  models: Models,
+  userId: string,
+  input: { cv_id: string; instruksi: string },
+): Promise<HasilSiapkanCv> {
+  const cv = await db.query.cvKhusus.findFirst({ where: and(eq(cvKhusus.id, input.cv_id), eq(cvKhusus.userId, userId)) });
+  if (!cv) throw new HttpError(404, "cv_tidak_ada", "CV Khusus tidak ditemukan.");
+  if (!cv.personaId || !cv.lowonganId) {
+    throw new HttpError(409, "cv_tanpa_sumber", "Persona atau Lowongan untuk CV ini sudah dihapus. Siapkan CV Khusus baru.");
+  }
+  const sumber = await muatSumber(db, userId, cv.personaId, cv.lowonganId);
+  const { isi, dibuang, faktaDipakai } = await susunIsi(models, sumber, { instruksi: input.instruksi, isi: cv.isi });
+  await db.update(cvKhusus).set({ isi, isiAwal: isi, updatedAt: new Date() }).where(eq(cvKhusus.id, cv.id));
+  return {
+    id: cv.id,
+    isi,
+    template: cv.template,
+    bahasa: cv.language,
+    fakta_dipakai: faktaDipakai,
+    poin_dibuang: dibuang,
+    peringatan: cv.template === "dua_kolom" ? "Templat dua kolom kurang ramah ATS." : null,
   };
 }
 
