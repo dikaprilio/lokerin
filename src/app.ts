@@ -26,7 +26,7 @@ export async function buildApp(env: Env) {
     bodyLimit: 1024 * 1024,
   });
 
-  const { db, pool } = createDb(env.DATABASE_URL);
+  const { db, pool } = createDb(env.DATABASE_URL, (error) => app.log.warn({ err: error }, "koneksi database terputus; dibuka ulang saat dibutuhkan"));
   const models = createModels(env);
   const bus = new EventBus();
   const { mastra, agent, memory } = createMastra(db, pool, models);
