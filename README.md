@@ -20,9 +20,11 @@ pnpm dev               # http://localhost:8080
 
 `pnpm db:embed` mengisi embedding yang masih kosong, misalnya bila seed berjalan saat kunci API bermasalah.
 
+`pnpm eval:agen` memeriksa apakah agen memilih alat yang benar untuk 12 percakapan contoh. Alatnya tiruan, jadi tidak ada yang ditulis ke database, tetapi tiap skenario memanggil model sungguhan lewat OpenRouter.
+
 ## Variabel environment
 
-Lihat `.env.example`. Yang wajib: `DATABASE_URL`, `SESSION_SECRET` (minimal 32 karakter), dan `OPENROUTER_API_KEY` (agen dan embedding). `OPENAI_API_KEY` hanya untuk panggilan suara; tanpanya, `POST /suara/sesi` menjawab 503 dan obrolan teks tetap jalan. `FRONTEND_ORIGINS` berisi origin frontend yang boleh memanggil API.
+Lihat `.env.example`. Yang wajib: `DATABASE_URL`, `SESSION_SECRET` (minimal 32 karakter), dan `OPENROUTER_API_KEY` (agen dan embedding). `OPENAI_API_KEY` hanya untuk panggilan suara; tanpanya, `POST /suara/sesi` menjawab 503 dan obrolan teks tetap jalan. `FRONTEND_ORIGINS` berisi origin frontend yang boleh memanggil API. `VAPID_PUBLIC_KEY` dan `VAPID_PRIVATE_KEY` (buat dengan `npx web-push generate-vapid-keys`) menyalakan push Kabar; tanpanya, Kabar tetap tersimpan dan tampil di aplikasi.
 
 ## Sesi
 
@@ -32,12 +34,17 @@ Onboarding membuat akun tamu sungguhan tanpa menimpa akun demo: `POST /auth/tamu
 
 Masuk dengan Google memakai access token dari Google Identity Services di browser (tanpa client secret): `POST /auth/google {"access_token":"..."}`. Server memeriksa bahwa token diterbitkan untuk salah satu `GOOGLE_CLIENT_IDS` dan emailnya terverifikasi. Akun yang sudah ada langsung mendapat `token`. Akun baru dijawab `{"baru":true,"google":{"nama","email"}}` tanpa dibuat dulu; onboarding lalu mengirim ulang token dengan `daftar` (isi yang sama seperti `/auth/tamu`) untuk membuat akun. Bila `GOOGLE_CLIENT_IDS` kosong, rute ini menjawab 503 `google_belum_diatur`.
 
+## Kabar
+
+Kabar adalah pemberitahuan yang disimpan ([ADR 0008](https://github.com/al-dioooo/lokerin-docs/blob/main/docs/adr/0008-alat-agen-tanya-pengguna-dan-kabar.md)). Pemberi Kerja mendapat Kabar saat Lamaran masuk. Pencari Kerja mendapat Kabar saat Lamarannya Dilihat (hanya di aplikasi), Lolos, Tidak Lolos, atau mendapat Tahap Berikutnya baru, dan saat ada Butuh Hari Ini yang cocok dengan Personanya di kotanya (paling banyak 50 penerima). Setiap Kabar baru juga dikirim sebagai event SSE `kabar.baru` dan, bila perangkatnya berlangganan, sebagai Web Push. Isi push tidak memuat kontak; `tautan` membuka rinciannya di aplikasi.
+
 ## Endpoint utama
 
 | Area | Endpoint |
 |---|---|
 | Sesi | `GET /auth/akun-demo`, `POST /auth/demo`, `POST /auth/tamu`, `POST /auth/google`, `POST /auth/keluar`, `GET /me`, `PATCH /me` |
-| Pembaruan langsung | `GET /events?kota=Purwokerto` (SSE: `lowongan.baru`, `butuh_hari_ini`, `lamaran.masuk`, `lamaran.status`, `suara.*`) |
+| Pembaruan langsung | `GET /events?kota=Purwokerto` (SSE: `lowongan.baru`, `butuh_hari_ini`, `lowongan.tutup`, `lamaran.masuk`, `lamaran.status`, `kabar.baru`, `suara.*`) |
+| Kabar | `GET /kabar`, `POST /kabar/baca` (tanpa `ids` berarti semua), `GET /push/kunci`, `POST /push/langganan`, `DELETE /push/langganan` |
 | Lowongan | `GET /lowongan`, `POST /lowongan/cari`, `GET /lowongan/peta`, `GET /lowongan/statistik`, `GET /lowongan/:id`, `POST /lowongan/:id/laporkan` |
 | Pemberi Kerja | `POST /pemberi/daftar`, `GET/POST /pemberi/lowongan`, `PATCH /pemberi/lowongan/:id`, `POST /pemberi/lowongan/:id/terbit`, `POST /pemberi/lowongan/:id/tutup`, `GET /pemberi/lamaran` |
 | Profil Induk | `GET /profil`, `POST /fakta`, `POST /fakta/putuskan`, `POST /persona`, `PATCH /persona/:id`, `GET /kartu-kerja/:id` |
