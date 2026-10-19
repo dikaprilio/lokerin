@@ -372,32 +372,46 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
   const tanya_pengguna = createTool({
     id: "tanya_pengguna",
     description: [
-      "Bertanya kepada pengguna dengan pilihan jawaban yang tampil sebagai tombol besar. Pakai saat jawaban yang kamu butuhkan punya pilihan yang jelas,",
+      "Bertanya kepada pengguna dengan pilihan jawaban yang tampil sebagai tombol besar, satu pertanyaan per layar. Pakai saat jawaban yang kamu butuhkan punya pilihan yang jelas,",
       "misalnya shift (pagi/siang/malam), jenis upah, Persona mana yang dipakai, atau lowongan mana yang dimaksud.",
+      "Bila butuh beberapa jawaban seperti itu, tanyakan semuanya dalam SATU panggilan (1 sampai 3 pertanyaan), jangan satu per satu dalam beberapa giliran.",
+      "Taruh pilihan yang paling mungkin di urutan pertama. Jangan menambah pilihan 'Lainnya': tombol 'Jawab sendiri' selalu ada.",
       "Jangan pakai untuk isian bebas seperti nama, nomor, atau alamat; tanyakan itu biasa. Jangan pakai untuk konfirmasi aksi final.",
-      "Setelah memanggil alat ini, BERHENTI dan tunggu. Jawaban pengguna datang sebagai pesan berikutnya.",
+      "Setelah memanggil alat ini, BERHENTI dan tunggu. Semua jawaban datang sekaligus sebagai pesan berikutnya, satu baris per pertanyaan: 'Judul: jawaban'. Pengguna juga bisa melewatinya.",
     ].join(" "),
     inputSchema: z.object({
-      pertanyaan: z.string().min(3).max(140).describe("Satu pertanyaan pendek, misalnya 'Kamu bisa kerja jam berapa?'"),
-      pilihan: z
+      pertanyaan: z
         .array(
           z.object({
-            label: z.string().min(1).max(40).describe("Teks tombol, singkat"),
-            keterangan: z.string().max(80).optional().describe("Penjelasan kecil di bawah tombol bila perlu"),
+            judul: z.string().min(1).max(16).describe("Label sangat singkat untuk ringkasan jawaban, misalnya 'Shift' atau 'Mulai'"),
+            teks: z.string().min(3).max(140).describe("Pertanyaan pendek, misalnya 'Kamu bisa kerja jam berapa?'"),
+            pilihan: z
+              .array(
+                z.object({
+                  label: z.string().min(1).max(40).describe("Teks tombol, singkat"),
+                  keterangan: z.string().max(80).optional().describe("Penjelasan kecil di bawah tombol bila perlu"),
+                }),
+              )
+              .min(2)
+              .max(5),
+            boleh_banyak: z.boolean().optional().describe("true bila pengguna boleh memilih lebih dari satu"),
+            boleh_ketik: z.boolean().optional().describe("false hanya bila jawaban harus salah satu pilihan; bawaannya pengguna boleh menjawab sendiri"),
           }),
         )
-        .min(2)
-        .max(6),
-      boleh_banyak: z.boolean().optional().describe("true bila pengguna boleh memilih lebih dari satu"),
-      boleh_ketik: z.boolean().optional().describe("true bila pengguna boleh menjawab dengan kata-katanya sendiri"),
+        .min(1)
+        .max(3),
     }),
     execute: async (input) => ({
       widget: "pertanyaan" as const,
       id: randomUUID(),
-      pertanyaan: input.pertanyaan,
-      pilihan: input.pilihan,
-      boleh_banyak: input.boleh_banyak ?? false,
-      boleh_ketik: input.boleh_ketik ?? false,
+      daftar: input.pertanyaan.map((p, i) => ({
+        id: `q${i + 1}`,
+        judul: p.judul,
+        teks: p.teks,
+        pilihan: p.pilihan,
+        boleh_banyak: p.boleh_banyak ?? false,
+        boleh_ketik: p.boleh_ketik ?? true,
+      })),
     }),
   });
 
