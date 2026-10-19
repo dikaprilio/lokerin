@@ -91,7 +91,13 @@ const isiDrafSchema = z.object({
   kota: z.string().optional(),
   kecamatan: z.string().optional(),
   alamat: z.string().optional(),
-  butuh_hari_ini_jam: z.number().int().optional().describe("Isi bila lowongan mendadak untuk hari ini: berapa jam lagi ditutup"),
+  butuh_hari_ini_jam: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      "Isi bila Pemberi Kerja menyebut lowongan mendadak dan batas waktunya: berapa jam lagi ditutup. Bila mulai hari ini dan ini kosong, Lokerin sendiri menandainya Butuh Hari Ini sampai jam kerja dimulai.",
+    ),
   bahasa: z.enum(["id", "en"]).optional(),
 });
 
