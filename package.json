@@ -14,7 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file=.env src/db/migrate.ts",
     "db:seed": "tsx --env-file=.env src/seed/index.ts",
-    "db:embed": "tsx --env-file=.env src/seed/embed.ts"
+    "db:embed": "tsx --env-file=.env src/seed/embed.ts",
+    "eval:agen": "tsx --env-file=.env src/evals/agen.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.96",
