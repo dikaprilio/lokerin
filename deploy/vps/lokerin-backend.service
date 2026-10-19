@@ -1,0 +1,27 @@
+# /etc/systemd/system/lokerin-backend.service
+# API hanya di 127.0.0.1:3120 (jaringan host, supaya Postgres cukup mendengar localhost).
+# Caddy meneruskan https://api.lokerin.site ke sini. Image lokerin-backend:current diganti
+# oleh lokerin-deploy.
+[Unit]
+Description=Lokerin backend API (Docker, 127.0.0.1:3120)
+After=network-online.target docker.service postgresql.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+SupplementaryGroups=docker
+ExecStartPre=-/usr/bin/docker rm -f lokerin-backend
+ExecStart=/usr/bin/docker run --rm --name lokerin-backend --init --shm-size=1g --memory=2500m \
+  --network host --env-file /etc/lokerin/backend.env \
+  -e HOST=127.0.0.1 -e PORT=3120 \
+  lokerin-backend:current
+ExecStop=/usr/bin/docker stop -t 20 lokerin-backend
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
