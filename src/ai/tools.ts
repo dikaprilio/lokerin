@@ -13,11 +13,46 @@ import { cariLowongan } from "../domain/matching.js";
 import { buatDraf, employerOf, ubahDraf, type IsiDraf } from "../domain/lowongan.js";
 import { profilInduk, simpanPersona, usulkanFakta } from "../domain/profil.js";
 import { lamaranMasuk, lamaranPencari, lamaranUntuk, tandaiDilihat } from "../domain/lamaran.js";
-import { revisiCvKhusus, siapkanCvKhusus } from "../cv/generate.js";
+import { revisiCvKhusus, siapkanCvKhusus, type HasilSiapkanCv } from "../cv/generate.js";
 import { daftarKabar } from "../kabar/kabar.js";
 import { kartuLowongan } from "../domain/serialize.js";
 
 export type LokerinRequestContext = { user: SessionUser; kanal: "teks" | "suara" };
+
+/**
+ * One request, one run per CV: the result is shown to the person first instead of being polished
+ * in a loop (each run used to draw its own card in the thread).
+ */
+function sekaliPerPermintaan(requestContext: RequestContext<unknown> | undefined, kunci: string) {
+  const rc = requestContext as RequestContext<Record<string, unknown>> | undefined;
+  let sudah = rc?.get("sudah_dikerjakan") as Set<string> | undefined;
+  if (!sudah) {
+    sudah = new Set();
+    rc?.set("sudah_dikerjakan", sudah);
+  }
+  if (sudah.has(kunci)) return false;
+  sudah.add(kunci);
+  return true;
+}
+
+const CV_SUDAH_DIUBAH = {
+  catatan: "CV ini sudah dikerjakan di permintaan ini dan hasilnya sudah tampil di layar. Jangan ubah lagi. Ringkas perubahannya dalam satu kalimat dan tanya apakah sudah pas.",
+};
+
+/** What the agent needs to talk about a CV, not the whole document (the card loads that itself). */
+function ringkasCv(h: HasilSiapkanCv) {
+  return {
+    widget: "cv_khusus" as const,
+    id: h.id,
+    isi: { judul: h.isi.judul, ringkasan: h.isi.ringkasan },
+    bagian: h.isi.bagian.map((b) => `${b.judul}: ${b.entri.map((e) => `${e.judul} (${e.poin.length} poin)`).join(", ")}`),
+    keahlian: h.isi.keahlian.map((k) => k.label),
+    bahasa: h.bahasa,
+    fakta_dipakai: h.fakta_dipakai,
+    poin_dibuang: h.poin_dibuang,
+    peringatan: h.peringatan,
+  };
+}
 
 function currentUser(requestContext: RequestContext<unknown> | undefined, role?: SessionUser["role"]) {
   const user = (requestContext as RequestContext<LokerinRequestContext> | undefined)?.get("user");
@@ -209,7 +244,7 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
   const siapkan_cv_khusus = createTool({
     id: "siapkan_cv_khusus",
     description:
-      "Menyusun CV Khusus untuk satu Lowongan dari satu Persona, hanya dari Fakta terkonfirmasi. Hasilnya dibuka di editor; pengguna boleh mengedit lalu menyetujuinya.",
+      "Menyusun CV Khusus untuk satu Lowongan dari satu Persona, hanya dari Fakta terkonfirmasi. Hasilnya dibuka di editor; pengguna boleh mengedit lalu menyetujuinya. Panggil sekali per permintaan.",
     inputSchema: z.object({
       lowongan_id: z.string(),
       persona_id: z.string(),
@@ -217,7 +252,8 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
     }),
     execute: async (input, context) => {
       const user = currentUser(context.requestContext, "pencari");
-      return { widget: "cv_khusus" as const, ...(await siapkanCvKhusus(db, models, user.id, input)) };
+      if (!sekaliPerPermintaan(context.requestContext, `siapkan:${input.lowongan_id}:${input.persona_id}`)) return CV_SUDAH_DIUBAH;
+      return ringkasCv(await siapkanCvKhusus(db, models, user.id, input));
     },
   });
 
@@ -368,14 +404,16 @@ export function createTools(db: Db, models: Models, { bus, env }: AlatDeps) {
   const ubah_cv_khusus = createTool({
     id: "ubah_cv_khusus",
     description:
-      "Merevisi CV Khusus yang sudah ada sesuai permintaan pengguna, misalnya 'ringkasan lebih pendek' atau 'tonjolkan pengalaman kasir'. Tetap hanya memakai Fakta terkonfirmasi; permintaan yang butuh isi baru diabaikan, jadi sarankan pengguna menceritakan pengalaman itu dulu.",
+      "Merevisi CV Khusus yang sudah ada sesuai permintaan pengguna, misalnya 'ringkasan lebih pendek' atau 'tonjolkan pengalaman kasir'. Tetap hanya memakai Fakta terkonfirmasi; permintaan yang butuh isi baru diabaikan, jadi sarankan pengguna menceritakan pengalaman itu dulu. " +
+      "Panggil SEKALI per permintaan pengguna dengan instruksi yang lengkap; hasilnya langsung tampil. Jangan memanggil ulang untuk menyempurnakan sendiri.",
     inputSchema: z.object({
       cv_id: z.string().describe("ID CV Khusus dari hasil siapkan_cv_khusus"),
       instruksi: z.string().min(3).max(300).describe("Permintaan pengguna dengan kata-katanya sendiri"),
     }),
     execute: async (input, context) => {
       const user = currentUser(context.requestContext, "pencari");
-      return { widget: "cv_khusus" as const, ...(await revisiCvKhusus(db, models, user.id, input)) };
+      if (!sekaliPerPermintaan(context.requestContext, `ubah:${input.cv_id}`)) return CV_SUDAH_DIUBAH;
+      return ringkasCv(await revisiCvKhusus(db, models, user.id, input));
     },
   });
 

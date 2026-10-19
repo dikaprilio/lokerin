@@ -16,7 +16,7 @@ const poinSchema = z.object({
 });
 
 const draftSchema = z.object({
-  judul: z.string().describe("Judul profesional singkat yang sesuai Lowongan, misalnya 'Juru Masak' atau 'UI/UX Designer'"),
+  judul: z.string().describe("Judul profesional singkat yang sesuai Lowongan, misalnya 'Juru Masak' atau 'UI/UX Designer'. Bukan 'Curriculum Vitae', 'CV', atau 'Resume'"),
   ringkasan: z
     .string()
     .describe("2-3 kalimat, hanya dari Fakta. Boleh **tebal** untuk 1-3 kata kunci yang dicari Lowongan."),
@@ -151,7 +151,11 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
       "Urutkan Entri dari yang paling relevan dengan Lowongan. Fakta yang tidak relevan boleh dilewati.",
       "Fakta keahlian masuk ke kelompok keahlian, bukan Entri. Kelompokkan per bidang (misalnya Desain, Riset, Alat), jangan menamai kelompok dengan nama satu alat.",
       ...(revisi
-        ? ["Ubah CV yang ada sesuai instruksi pengguna. Bila instruksi meminta isi yang tidak ada di Fakta, abaikan bagian itu dan jangan mengarangnya."]
+        ? [
+            "REVISI: ubah CV yang ada sesuai instruksi pengguna. Instruksi ini mengalahkan aturan susunan di atas: boleh menghapus bagian, memindahkan poin dari satu entri ke entri lain (misalnya dari Prestasi ke Pengalaman), menggabung atau memecah poin. ATURAN MUTLAK tetap berlaku.",
+            "Semua yang tidak disebut instruksi dibiarkan persis seperti CV saat ini, termasuk bahasa, urutan, dan isinya.",
+            "Bila instruksi meminta isi yang tidak ada di Fakta, abaikan bagian itu dan jangan mengarangnya.",
+          ]
         : []),
       bahasa === "en" ? "Fakta may be in Indonesian; translate faithfully without adding anything." : "Gunakan Bahasa Indonesia yang baku tetapi sederhana.",
     ].join("\n"),
@@ -229,7 +233,7 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
   const isi: IsiCv = {
     versi: 2,
     nama: user.name,
-    judul: rapikan(object.judul).replace(/^CV\s+/i, ""),
+    judul: judulCv(rapikan(object.judul).replace(/^CV\s+/i, ""), target.lowongan.title),
     kontak: { telepon: user.phone ?? undefined, email: user.email ?? undefined, kota: user.district ?? user.city },
     ringkasan: rapikan(object.ringkasan),
     keahlian: object.keahlian
@@ -240,6 +244,11 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
   };
   const faktaDipakai = new Set(bagianRapi.flatMap((section) => section.entri.flatMap((entri) => [...entri.fakta_ids, ...entri.poin.flatMap((poin) => poin.fakta_ids)]))).size;
   return { isi, bahasa, dibuang, faktaDipakai };
+}
+
+/** A CV headline names the work ("Marketing Intern"); a generic "Curriculum Vitae" falls back to the job. */
+function judulCv(judul: string, lowongan: string) {
+  return !judul || /^(curriculum vitae|cv|resume|résumé|riwayat hidup|daftar riwayat hidup)$/i.test(judul.trim()) ? lowongan : judul;
 }
 
 /**
