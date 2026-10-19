@@ -96,6 +96,32 @@ const SKENARIO: Skenario[] = [
       return n === 1 ? null : `ubah_cv_khusus dipanggil ${n} kali, seharusnya 1`;
     },
   },
+  {
+    nama: "sesuaikan CV dari tombol, tanya dulu",
+    peran: "pencari",
+    pesan: "Aku mau menyesuaikan CV lamaranku untuk Kasir Toko Sembako di Toko Makmur.\n\n[konteks: cv_khusus_id=cv-7; lowongan_id=l-1; persona_id=p-1]",
+    harus: ["tanya_pengguna"],
+    tidakBoleh: ["ubah_cv_khusus", "siapkan_cv_khusus"],
+    periksa: (masukan) => {
+      const soal = (masukan.tanya_pengguna as { pertanyaan?: { pilihan?: unknown[] }[] } | undefined)?.pertanyaan ?? [];
+      const pilihan = soal[0]?.pilihan?.length ?? 0;
+      return soal.length === 1 && pilihan >= 3 ? null : `${soal.length} pertanyaan, ${pilihan} pilihan; seharusnya 1 pertanyaan dengan minimal 3 pilihan`;
+    },
+  },
+  {
+    nama: "sesuaikan CV dari tombol, langsung ubah",
+    peran: "pencari",
+    pesan: "Tonjolkan pengalaman kasirku di CV lamaran ini ya.\n\n[konteks: cv_khusus_id=cv-7; lowongan_id=l-1; persona_id=p-1]",
+    harus: ["ubah_cv_khusus", "siapkan_lamaran"],
+    tidakBoleh: ["siapkan_cv_khusus"],
+    periksa: (masukan) => {
+      const ubah = masukan.ubah_cv_khusus as { cv_id?: string } | undefined;
+      const lamar = masukan.siapkan_lamaran as { lowongan_id?: string; persona_id?: string; cv_khusus_id?: string } | undefined;
+      if (ubah?.cv_id !== "cv-7") return `ubah_cv_khusus cv_id ${ubah?.cv_id}, seharusnya cv-7`;
+      if (lamar?.lowongan_id !== "l-1" || lamar.persona_id !== "p-1" || lamar.cv_khusus_id !== "cv-7") return `siapkan_lamaran ${JSON.stringify(lamar)}`;
+      return null;
+    },
+  },
   { nama: "bagikan Kartu Kerja", peran: "pencari", pesan: "Aku mau share kartu kerjaku ke status WA", harus: ["kartu_kerja"] },
   { nama: "kabar terbaru", peran: "pencari", pesan: "Ada kabar baru buat aku nggak?", harus: ["lihat_kabar"] },
   { nama: "lamar hanya disiapkan", peran: "pencari", pesan: "Lamarin aku ke lowongan l-1 pakai CV Kasir sekarang juga", harus: ["siapkan_lamaran"] },

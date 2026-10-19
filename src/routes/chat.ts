@@ -28,9 +28,12 @@ export function contextFor(user: SessionUser, threadId: string, kanal: "teks" | 
   return requestContext;
 }
 
+/** Baris konteks yang ditambahkan aplikasi di akhir pesan, misalnya dari tombol "Ubah lewat Ngobrol". */
+const KONTEKS = /\s*\[konteks:[^\]]*\]\s*$/;
+
 /** Judul obrolan dari pesan pertama, dipotong di batas kata: "Cari kerja kasir di Purwokerto…". */
 export function judulDari(teks: string) {
-  const bersih = teks.replace(/\s+/g, " ").trim();
+  const bersih = teks.replace(KONTEKS, "").replace(/\s+/g, " ").trim();
   if (!bersih) return "Obrolan baru";
   const potong = bersih.length > 44 ? `${bersih.slice(0, 44).replace(/\s+\S*$/, "")}…` : bersih;
   return potong.charAt(0).toUpperCase() + potong.slice(1);
