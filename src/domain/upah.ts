@@ -57,6 +57,39 @@ export function penuhWaktu(upah: Upah) {
   return (upah.hoursPerDay ?? 0) * (upah.daysPerWeek ?? 0) >= 35;
 }
 
+/**
+ * Kerja paruh waktu menurut penjelasan PP 36/2021 Pasal 16: kurang dari 7 jam sehari dan kurang dari
+ * 35 jam seminggu. Bila hari per minggu belum disebut, jam per hari saja yang menentukan.
+ */
+export function paruhWaktu(upah: Upah) {
+  const jam = upah.hoursPerDay;
+  if (!jam || jam >= 7) return false;
+  return !upah.daysPerWeek || jam * upah.daysPerWeek < 35;
+}
+
+/** Upah per jam dari upah minimal dan jam kerja di Lowongan; null bila jamnya belum cukup untuk menghitung. */
+export function upahPerJam(upah: Upah): number | null {
+  const { payMin: amount, hoursPerDay: jam, daysPerWeek: hari } = upah;
+  if (!amount || !upah.payType) return null;
+  switch (upah.payType) {
+    case "per_jam":
+      return amount;
+    case "harian":
+      return jam ? amount / jam : null;
+    case "mingguan":
+      return jam && hari ? amount / (jam * hari) : null;
+    case "bulanan":
+      return jam && hari ? amount / (jam * hari * WEEKS_PER_MONTH) : null;
+    case "borongan":
+      return null;
+  }
+}
+
+/** Upah per jam terendah untuk pekerja paruh waktu: upah sebulan dibagi 126 (PP 36/2021 Pasal 16). */
+export function umkPerJam(acuan: Pick<AcuanUpah, "umk_bulanan">) {
+  return acuan.umk_bulanan / 126;
+}
+
 export function formatRupiah(value: number) {
   return `Rp${Math.round(value).toLocaleString("id-ID")}`;
 }
