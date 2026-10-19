@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "tsx watch --env-file=.env src/server.ts",
-    "build": "tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/seed/data','dist/seed/data',{recursive:true})\"",
+    "build": "tsc -p tsconfig.json && node -e \"const fs=require('fs');fs.cpSync('src/seed/data','dist/seed/data',{recursive:true});fs.cpSync('src/cv/fonts','dist/cv/fonts',{recursive:true})\"",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",

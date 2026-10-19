@@ -22,6 +22,13 @@
       "when": 1792380052495,
       "tag": "0002_kabar",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792382251815,
+      "tag": "0003_postgis",
+      "breakpoints": true
     }
   ]
 }

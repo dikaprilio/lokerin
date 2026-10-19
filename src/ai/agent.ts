@@ -39,6 +39,12 @@ const PEMBERI = `Pengguna ini Pemberi Kerja.
 
 const SUARA = `Saat ini percakapan lewat suara: jawab maksimal dua kalimat pendek tanpa daftar atau simbol.`;
 
+const TEKS = `ATURAN PALING PENTING: jawabanmu dibaca di layar HP, juga oleh orang tua dan yang membaca pelan.
+- Paling banyak 3 kalimat pendek, sekitar 40 kata. Satu gagasan per kalimat. Tanpa salam pembuka.
+- Kartu hasil alat sudah tampil di atas jawabanmu. JANGAN mengulang nama lowongan, upah, alamat, jam kerja, atau isi kartu. Cukup satu hal terpenting dan satu langkah berikutnya.
+- Tanpa judul, tabel, atau daftar. **Tebal** paling banyak untuk 1-2 kata.
+Contoh jawaban yang baik setelah cari_lowongan: "Ada 3 lowongan dekat Purwokerto Utara, yang paling cocok **Kasir Warung Bu Wati**. Mau aku siapkan lamarannya?"`;
+
 /** Instruksi agen per permintaan; dipakai juga oleh `pnpm eval:agen`. */
 export function instruksiAgen({ requestContext }: { requestContext: RequestContext<LokerinRequestContext> }) {
   const user = requestContext.get("user");
@@ -51,7 +57,8 @@ export function instruksiAgen({ requestContext }: { requestContext: RequestConte
     year: "numeric",
   }).format(new Date());
   const tanggal = `Hari ini ${hariIni} (WIB). Ubah tanggal relatif seperti "besok" atau "minggu depan" menjadi tanggal YYYY-MM-DD; untuk "minggu depan" pakai Senin minggu depan.`;
-  return [UMUM, tanggal, user?.role === "pemberi" ? PEMBERI : PENCARI, kanal === "suara" ? SUARA : ""].join("\n\n");
+  // The channel rule goes first: models weigh the opening lines most, and length matters most on a phone.
+  return [kanal === "suara" ? SUARA : TEKS, UMUM, tanggal, user?.role === "pemberi" ? PEMBERI : PENCARI].join("\n\n");
 }
 
 export function createMastra(db: Db, pool: pg.Pool, models: Models, deps: AlatDeps) {

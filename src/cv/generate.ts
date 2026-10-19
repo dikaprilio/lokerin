@@ -3,21 +3,48 @@ import { generateObject } from "ai";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
-import { cvKhusus, employers, fakta, lowongan, personas, users, type IsiCv } from "../db/schema.js";
+import { cvKhusus, employers, fakta, lowongan, personas, users, type BagianCv, type IsiCv } from "../db/schema.js";
 import type { Models } from "../ai/models.js";
 import { HttpError } from "../auth/session.js";
+import { normalisasiIsi, teksPerId } from "./isi.js";
+
+const poinSchema = z.object({
+  text: z
+    .string()
+    .describe("Satu poin: kata kerja di depan, konkret, satu kalimat. Boleh **tebal** untuk angka atau hasil yang ADA di Fakta."),
+  fakta_ids: z.array(z.string()).describe("ID Fakta asal poin ini; wajib minimal satu"),
+});
 
 const draftSchema = z.object({
   judul: z.string().describe("Judul profesional singkat yang sesuai Lowongan, misalnya 'Juru Masak' atau 'UI/UX Designer'"),
-  ringkasan: z.string().describe("2-3 kalimat, hanya dari Fakta yang diberikan"),
-  keahlian: z.array(z.string()).describe("Keahlian yang relevan dengan Lowongan, diambil dari Fakta"),
+  ringkasan: z
+    .string()
+    .describe("2-3 kalimat, hanya dari Fakta. Boleh **tebal** untuk 1-3 kata kunci yang dicari Lowongan."),
+  keahlian: z
+    .array(
+      z.object({
+        label: z
+          .string()
+          .describe(
+            "Nama bidang, bukan nama alat. Benar: {label:'Desain', isi:['Figma','Wireframe']}. Salah: {label:'Figma', isi:[...]}. Contoh label: Dapur, Kasir & Toko, Desain, Riset Pengguna, Alat, Bahasa",
+          ),
+        isi: z.array(z.string()).describe("Keahlian dalam kelompok ini, dari Fakta"),
+      }),
+    )
+    .describe("2-4 kelompok keahlian; setiap kelompok berisi 2-8 keahlian"),
   bagian: z.array(
     z.object({
-      judul: z.string().describe("Nama bagian, misalnya Pengalaman, Proyek, Pendidikan, Prestasi"),
-      items: z.array(
+      jenis: z.enum(["pengalaman", "pendidikan", "proyek", "prestasi", "lainnya"]),
+      judul: z.string().describe("Nama jenis bagian (Pengalaman, Pendidikan, Proyek, Prestasi), bukan nama entri"),
+      entri: z.array(
         z.object({
-          text: z.string().describe("Satu poin CV yang diringkas atau diurutkan ulang dari Fakta"),
-          fakta_ids: z.array(z.string()).describe("ID Fakta asal poin ini; wajib minimal satu"),
+          judul: z.string().describe("Posisi, nama sekolah, atau nama proyek, persis dari judul Fakta"),
+          tempat: z.string().optional().describe("Usaha, organisasi, atau jurusan dari tempat Fakta"),
+          keterangan: z.string().optional().describe("Catatan pendek bila ada di Fakta, misalnya 'paruh waktu'"),
+          periode: z.string().optional().describe("Periode dari Fakta, misalnya '2021 – sekarang'"),
+          lokasi: z.string().optional(),
+          fakta_ids: z.array(z.string()).describe("ID Fakta yang menjadi dasar entri ini; wajib minimal satu"),
+          poin: z.array(poinSchema).describe("0-4 poin dari detail Fakta"),
         }),
       ),
     }),
@@ -83,14 +110,30 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
   const { user, persona, target } = sumber;
   const bahasa = target.lowongan.language;
   const daftarFakta = sumber.fakta
-    .map((item) => `- [${item.id}] (${item.kind}) ${item.title}${item.place ? ` di ${item.place}` : ""}${item.period ? `, ${item.period}` : ""}${item.detail ? `: ${item.detail}` : ""}`)
+    .map((item) =>
+      [
+        `- id: ${item.id}`,
+        `  jenis: ${item.kind}`,
+        `  judul: ${item.title}`,
+        item.place ? `  tempat: ${item.place}` : null,
+        item.period ? `  periode: ${item.period}` : null,
+        item.detail ? `  detail: ${item.detail}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    )
     .join("\n");
   const cvSekarang = revisi
     ? [
         `Judul: ${revisi.isi.judul}`,
         `Ringkasan: ${revisi.isi.ringkasan}`,
-        `Keahlian: ${revisi.isi.keahlian.join(", ")}`,
-        ...revisi.isi.bagian.map((bagian) => `${bagian.judul}:\n${bagian.items.map((item) => `- ${item.text}`).join("\n")}`),
+        `Keahlian: ${revisi.isi.keahlian.map((k) => `${k.label}: ${k.isi.join(", ")}`).join("; ")}`,
+        ...revisi.isi.bagian.map(
+          (bagian) =>
+            `${bagian.judul}:\n${bagian.entri
+              .map((e) => `- ${[e.judul, e.tempat, e.periode].filter(Boolean).join(", ")}\n${e.poin.map((p) => `  • ${p.text}`).join("\n")}`)
+              .join("\n")}`,
+        ),
       ].join("\n")
     : "";
 
@@ -98,14 +141,19 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
     model: models.chat("none"),
     schema: draftSchema,
     system: [
-      "Kamu menyusun CV Khusus untuk satu Lamaran di Lokerin.",
-      "ATURAN MUTLAK: hanya gunakan Fakta di daftar. Boleh meringkas, mengurutkan ulang, dan merapikan bahasa, tetapi DILARANG menambah pengalaman, angka, nama tempat, atau keahlian yang tidak ada di Fakta.",
-      "Setiap poin wajib mencantumkan fakta_ids yang menjadi sumbernya.",
-      "Utamakan Fakta yang paling relevan dengan Lowongan; Fakta yang tidak relevan boleh diringkas atau tidak dipakai.",
+      bahasa === "en"
+        ? "LANGUAGE: write the whole CV in English, including every section title (Experience, Education, Projects, Awards)."
+        : "BAHASA: tulis seluruh CV dalam Bahasa Indonesia, termasuk semua judul bagian (Pengalaman, Pendidikan, Proyek, Prestasi).",
+      "Kamu menyusun CV Khusus untuk satu Lamaran di Lokerin, dengan gaya CV yang disukai perekrut: rapi, padat, dan mudah dipindai.",
+      "ATURAN MUTLAK: hanya gunakan Fakta di daftar. Boleh meringkas, mengurutkan ulang, dan merapikan bahasa, tetapi DILARANG menambah pengalaman, angka, nama tempat, tanggal, atau keahlian yang tidak ada di Fakta.",
+      "Satu Fakta pengalaman, pendidikan, proyek, atau prestasi menjadi satu Entri: judul dari judul Fakta, tempat dari tempat Fakta, periode dari periode Fakta. Detail Fakta menjadi 1-4 poin.",
+      "Setiap Entri dan setiap poin wajib mencantumkan fakta_ids sumbernya, hanya di kolom fakta_ids. Jangan pernah menulis ID Fakta di dalam teks.",
+      "Urutkan Entri dari yang paling relevan dengan Lowongan. Fakta yang tidak relevan boleh dilewati.",
+      "Fakta keahlian masuk ke kelompok keahlian, bukan Entri. Kelompokkan per bidang (misalnya Desain, Riset, Alat), jangan menamai kelompok dengan nama satu alat.",
       ...(revisi
         ? ["Ubah CV yang ada sesuai instruksi pengguna. Bila instruksi meminta isi yang tidak ada di Fakta, abaikan bagian itu dan jangan mengarangnya."]
         : []),
-      bahasa === "en" ? "Tulis CV dalam bahasa Inggris." : "Tulis CV dalam Bahasa Indonesia yang baku tetapi sederhana.",
+      bahasa === "en" ? "Fakta may be in Indonesian; translate faithfully without adding anything." : "Gunakan Bahasa Indonesia yang baku tetapi sederhana.",
     ].join("\n"),
     prompt: [
       `Lowongan: ${target.lowongan.title} di ${target.employer.businessName} (${target.lowongan.city ?? ""})`,
@@ -119,31 +167,78 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
   });
 
   const sah = new Set(sumber.fakta.map((item) => item.id));
+  // Models sometimes echo "[<uuid>]" into the text; it never belongs on a CV.
+  const rapikan = (teks: string) =>
+    teks
+      .replace(/\s*[[(][0-9a-f]{8}-[0-9a-f-]{27,}[\])]/gi, "")
+      .replace(/^\s*(?:[>\-*•]+\s*)+/, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  const saring = (ids: string[]) => ids.filter((faktaId) => sah.has(faktaId));
   let dibuang = 0;
-  const bagian = object.bagian
+  const bagian: BagianCv[] = object.bagian
     .map((section) => ({
       id: randomUUID(),
       judul: section.judul,
-      items: section.items
-        .map((item) => ({ ...item, fakta_ids: item.fakta_ids.filter((faktaId) => sah.has(faktaId)) }))
-        .filter((item) => {
-          const ok = item.fakta_ids.length > 0 && item.text.trim().length > 0;
+      jenis: section.jenis,
+      entri: section.entri
+        .map((entri) => ({ ...entri, fakta_ids: saring(entri.fakta_ids) }))
+        .filter((entri) => {
+          const ok = entri.fakta_ids.length > 0 && entri.judul.trim().length > 0;
           if (!ok) dibuang++;
           return ok;
         })
-        .map((item) => ({ id: randomUUID(), text: item.text.trim(), fakta_ids: item.fakta_ids })),
+        .map((entri) => ({
+          id: randomUUID(),
+          judul: rapikan(entri.judul),
+          // "Freelance, Freelance": a place that repeats the title adds nothing.
+          ...(entri.tempat?.trim() && rapikan(entri.tempat).toLowerCase() !== rapikan(entri.judul).toLowerCase() ? { tempat: rapikan(entri.tempat) } : {}),
+          ...(entri.keterangan?.trim() ? { keterangan: entri.keterangan.trim() } : {}),
+          ...(entri.periode?.trim() ? { periode: entri.periode.trim() } : {}),
+          ...(entri.lokasi?.trim() ? { lokasi: entri.lokasi.trim() } : {}),
+          fakta_ids: entri.fakta_ids,
+          poin: entri.poin
+            .map((poin) => ({ ...poin, text: rapikan(poin.text), fakta_ids: saring(poin.fakta_ids) }))
+            .filter((poin) => {
+              const ok = poin.fakta_ids.length > 0 && poin.text.trim().length > 0;
+              if (!ok) dibuang++;
+              return ok;
+            })
+            .map((poin) => ({ id: randomUUID(), text: poin.text.trim(), fakta_ids: poin.fakta_ids })),
+        })),
     }))
-    .filter((section) => section.items.length > 0);
+    .filter((section) => section.entri.length > 0);
+
+  // Section titles follow the language the model actually wrote in, so headings never disagree with the text.
+  const contoh = ` ${object.ringkasan} ${bagian.flatMap((b) => b.entri.flatMap((e) => e.poin.map((p) => p.text))).join(" ")} `.toLowerCase();
+  const hitung = (kata: string[]) => kata.reduce((n, k) => n + (contoh.split(` ${k} `).length - 1), 0);
+  const bahasaTulisan: "id" | "en" = hitung(["dan", "dengan", "yang", "untuk", "di", "dari"]) >= hitung(["and", "with", "the", "for", "in", "of"]) ? "id" : "en";
+  // One section per kind, with a fixed title, however the model split them.
+  const JUDUL: Record<"id" | "en", Record<BagianCv["jenis"], string>> = {
+    id: { pengalaman: "Pengalaman", pendidikan: "Pendidikan", proyek: "Proyek", prestasi: "Prestasi", lainnya: "Lainnya" },
+    en: { pengalaman: "Experience", pendidikan: "Education", proyek: "Projects", prestasi: "Awards", lainnya: "Other" },
+  };
+  const perJenis = new Map<BagianCv["jenis"], BagianCv>();
+  for (const section of bagian) {
+    const ada = perJenis.get(section.jenis);
+    if (ada) ada.entri.push(...section.entri);
+    else perJenis.set(section.jenis, { ...section, judul: JUDUL[bahasaTulisan][section.jenis] });
+  }
+  const bagianRapi = [...perJenis.values()];
 
   const isi: IsiCv = {
+    versi: 2,
     nama: user.name,
-    judul: object.judul,
-    kontak: { telepon: user.phone ?? undefined, email: user.email ?? undefined, kota: user.city },
-    ringkasan: object.ringkasan,
-    keahlian: object.keahlian.slice(0, 12),
-    bagian,
+    judul: rapikan(object.judul).replace(/^CV\s+/i, ""),
+    kontak: { telepon: user.phone ?? undefined, email: user.email ?? undefined, kota: user.district ?? user.city },
+    ringkasan: rapikan(object.ringkasan),
+    keahlian: object.keahlian
+      .map((k) => ({ id: randomUUID(), label: rapikan(k.label), isi: k.isi.map(rapikan).filter(Boolean).slice(0, 10) }))
+      .filter((k) => k.label && k.isi.length)
+      .slice(0, 4),
+    bagian: bagianRapi,
   };
-  const faktaDipakai = new Set(bagian.flatMap((section) => section.items.flatMap((item) => item.fakta_ids))).size;
+  const faktaDipakai = new Set(bagianRapi.flatMap((section) => section.entri.flatMap((entri) => [...entri.fakta_ids, ...entri.poin.flatMap((poin) => poin.fakta_ids)]))).size;
   return { isi, bahasa, dibuang, faktaDipakai };
 }
 
@@ -193,7 +288,7 @@ export async function revisiCvKhusus(
     throw new HttpError(409, "cv_tanpa_sumber", "Persona atau Lowongan untuk CV ini sudah dihapus. Siapkan CV Khusus baru.");
   }
   const sumber = await muatSumber(db, userId, cv.personaId, cv.lowonganId);
-  const { isi, dibuang, faktaDipakai } = await susunIsi(models, sumber, { instruksi: input.instruksi, isi: cv.isi });
+  const { isi, dibuang, faktaDipakai } = await susunIsi(models, sumber, { instruksi: input.instruksi, isi: normalisasiIsi(cv.isi) });
   await db.update(cvKhusus).set({ isi, isiAwal: isi, updatedAt: new Date() }).where(eq(cvKhusus.id, cv.id));
   return {
     id: cv.id,
@@ -219,16 +314,29 @@ export async function simpanEditCv(
 ) {
   const row = await db.query.cvKhusus.findFirst({ where: and(eq(cvKhusus.id, id), eq(cvKhusus.userId, userId)) });
   if (!row) throw new HttpError(404, "cv_tidak_ada", "CV Khusus tidak ditemukan.");
-  const awal = new Map(row.isiAwal.bagian.flatMap((section) => section.items.map((item) => [item.id, item.text])));
+  const awal = teksPerId(normalisasiIsi(row.isiAwal));
   const calonFakta: { item_id: string; text: string }[] = [];
   const isi: IsiCv = {
     ...input.isi,
+    versi: 2,
     bagian: input.isi.bagian.map((section) => ({
       ...section,
-      items: section.items.map((item) => {
-        const edited = awal.get(item.id) !== item.text;
-        if (edited && (!item.fakta_ids?.length || !awal.has(item.id))) calonFakta.push({ item_id: item.id, text: item.text });
-        return { ...item, fakta_ids: item.fakta_ids ?? [], diedit_pengguna: edited || undefined };
+      entri: section.entri.map((entri) => {
+        const teksEntri = [entri.judul, entri.tempat, entri.periode].filter(Boolean).join(" | ");
+        const entriBaru = !awal.has(entri.id);
+        const entriDiedit = awal.get(entri.id) !== teksEntri;
+        // A brand-new entry is a claim Lokerin has no Fakta for yet; offer it as one.
+        if (entriBaru && entri.judul.trim()) calonFakta.push({ item_id: entri.id, text: [entri.judul, entri.tempat, entri.periode].filter(Boolean).join(", ") });
+        return {
+          ...entri,
+          fakta_ids: entri.fakta_ids ?? [],
+          diedit_pengguna: entriDiedit || undefined,
+          poin: entri.poin.map((poin) => {
+            const diedit = awal.get(poin.id) !== poin.text;
+            if (diedit && (!poin.fakta_ids?.length || !awal.has(poin.id)) && poin.text.trim()) calonFakta.push({ item_id: poin.id, text: poin.text });
+            return { ...poin, fakta_ids: poin.fakta_ids ?? [], diedit_pengguna: diedit || undefined };
+          }),
+        };
       }),
     })),
   };
@@ -239,7 +347,7 @@ export async function simpanEditCv(
     .returning();
   return {
     id,
-    isi: updated?.isi ?? isi,
+    isi: normalisasiIsi(updated?.isi ?? isi),
     template: updated?.template ?? row.template,
     calon_fakta: calonFakta,
     peringatan: (updated?.template ?? row.template) === "dua_kolom" ? "Templat dua kolom kurang ramah ATS." : null,

@@ -24,7 +24,9 @@ pnpm dev               # http://localhost:8080
 
 ## Variabel environment
 
-Lihat `.env.example`. Yang wajib: `DATABASE_URL`, `SESSION_SECRET` (minimal 32 karakter), dan `OPENROUTER_API_KEY` (agen dan embedding). `OPENAI_API_KEY` hanya untuk panggilan suara; tanpanya, `POST /suara/sesi` menjawab 503 dan obrolan teks tetap jalan. `FRONTEND_ORIGINS` berisi origin frontend yang boleh memanggil API. `VAPID_PUBLIC_KEY` dan `VAPID_PRIVATE_KEY` (buat dengan `npx web-push generate-vapid-keys`) menyalakan push Kabar; tanpanya, Kabar tetap tersimpan dan tampil di aplikasi.
+Lihat `.env.example`. Yang wajib: `DATABASE_URL`, `SESSION_SECRET` (minimal 32 karakter), dan `OPENROUTER_API_KEY` (agen dan embedding). `OPENAI_API_KEY` hanya untuk panggilan suara; tanpanya, `POST /suara/sesi` menjawab 503 dan obrolan teks tetap jalan. `FRONTEND_ORIGINS` berisi origin frontend yang boleh memanggil API. `VAPID_PUBLIC_KEY` dan `VAPID_PRIVATE_KEY` (buat dengan `npx web-push generate-vapid-keys`) menyalakan push Kabar; tanpanya, Kabar tetap tersimpan dan tampil di aplikasi. `MAPBOX_SECRET_TOKEN` adalah token rahasia Mapbox (`sk.*`) dengan izin `tokens:write`; server memakainya untuk membuat token sementara baca-saja bagi peta di browser, dan token rahasianya tidak pernah dikirim ke frontend.
+
+Database memakai ekstensi `vector` (pgvector, untuk pencocokan) dan `postgis` (untuk lowongan di sekitar). Migrasi `0003_postgis` menyalakan PostGIS dan menambah kolom `lowongan.titik` (geography, terisi otomatis dari lat dan lng) dengan indeks GiST.
 
 ## Sesi
 
@@ -33,6 +35,10 @@ Masuk dengan akun demo: `POST /auth/demo {"key":"pak-darto"}`. Respons berisi `t
 Onboarding membuat akun tamu sungguhan tanpa menimpa akun demo: `POST /auth/tamu {"peran":"pencari","nama":"Sari"}` (opsional `kota`, bawaan Purwokerto, dan `kecamatan`; maksimal 10 kali per menit per IP) menjawab dengan bentuk yang sama seperti `/auth/demo`. Pemberi Kerja tamu lalu mendaftarkan usahanya lewat `POST /pemberi/daftar`. Verifikasi masih demo: mencentang KTP hanya membuat status `menunggu`, dan lencana Terverifikasi tidak pernah diberikan otomatis. Nama dan lokasi bisa diubah lewat `PATCH /me`. Akun tamu ikut terhapus saat `pnpm db:seed`.
 
 Masuk dengan Google memakai access token dari Google Identity Services di browser (tanpa client secret): `POST /auth/google {"access_token":"..."}`. Server memeriksa bahwa token diterbitkan untuk salah satu `GOOGLE_CLIENT_IDS` dan emailnya terverifikasi. Akun yang sudah ada langsung mendapat `token`. Akun baru dijawab `{"baru":true,"google":{"nama","email"}}` tanpa dibuat dulu; onboarding lalu mengirim ulang token dengan `daftar` (isi yang sama seperti `/auth/tamu`) untuk membuat akun. Bila `GOOGLE_CLIENT_IDS` kosong, rute ini menjawab 503 `google_belum_diatur`.
+
+## CV Khusus
+
+Isi CV terstruktur seperti CV LaTeX yang disukai perekrut ([ADR 0009](https://github.com/al-dioooo/lokerin-docs/blob/main/docs/adr/0009-ngobrol-dua-mode-cv-latex-dan-peta.md)): bagian (Pengalaman, Pendidikan, Proyek, Prestasi) berisi entri dengan judul, tempat, periode, dan poin, ditambah kelompok keahlian. Setiap entri dan poin menunjuk ke Fakta asal; yang tidak punya Fakta sah dibuang. PDF dicetak Chromium dari HTML yang sama dengan pratinjau di aplikasi, dengan huruf CMU Serif yang disematkan (SIL OFL, `src/cv/fonts/OFL.txt`). `GET /cv/:id/pdf?unduh=1` memberi nama berkas seperti `CV - Sari Wulandari - Juru Masak.pdf`. CV versi lama diubah ke bentuk baru saat dibaca.
 
 ## Kabar
 
@@ -50,7 +56,8 @@ Kabar adalah pemberitahuan yang disimpan ([ADR 0008](https://github.com/al-diooo
 | Profil Induk | `GET /profil`, `POST /fakta`, `POST /fakta/putuskan`, `POST /persona`, `PATCH /persona/:id`, `GET /kartu-kerja/:id` |
 | Lamaran | `POST /lamaran`, `GET /pencari/lamaran`, `GET /lamaran/:id`, `POST /lamaran/:id/dilihat`, `POST /lamaran/:id/lolos`, `POST /lamaran/:id/tidak-lolos`, `POST /lamaran/:id/tahap` |
 | CV Khusus | `POST /cv`, `GET /cv/:id`, `PATCH /cv/:id`, `GET /cv/:id/html`, `GET /cv/:id/pdf` |
-| Asisten | `POST /chat` (AI SDK v7 `useChat`), `GET /chat/riwayat`, `POST /suara/sesi`, `DELETE /suara/sesi/:id` |
+| Asisten | `POST /chat` (AI SDK v7 `useChat`), `GET /chat/obrolan`, `DELETE /chat/obrolan/:id`, `GET /chat/riwayat?id=`, `POST /suara/sesi`, `DELETE /suara/sesi/:id` |
+| Peta | `GET /lowongan/peta?lat=&lng=&radius_km=&butuh_hari_ini=` (PostGIS `ST_DWithin`), `GET /peta/kunci` (token Mapbox sementara) |
 
 ## Aturan yang dijaga di kode
 

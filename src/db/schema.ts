@@ -20,6 +20,11 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => "bytea",
 });
 
+/** Titik PostGIS (geography, WGS84). Jarak dan radius dihitung dalam meter di atas bumi. */
+const geografi = customType<{ data: string; driverData: string }>({
+  dataType: () => "geography(Point,4326)",
+});
+
 const id = () => uuid("id").primaryKey().defaultRandom();
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
@@ -152,6 +157,10 @@ export const lowongan = pgTable(
     address: text("address"),
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
+    /** Diisi otomatis dari lat dan lng untuk pencarian sekitar (ST_DWithin, indeks GiST). */
+    titik: geografi("titik").generatedAlwaysAs(
+      sql`CASE WHEN lat IS NOT NULL AND lng IS NOT NULL THEN ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography END`,
+    ),
     urgentUntil: timestamp("urgent_until", { withTimezone: true }),
     language: text("language").$type<"id" | "en">().notNull().default("id"),
     status: text("status").$type<StatusLowongan>().notNull().default("draf"),
@@ -165,18 +174,51 @@ export const lowongan = pgTable(
     index("lowongan_feed_idx").on(table.status, table.city),
     index("lowongan_employer_idx").on(table.employerId),
     index("lowongan_embedding_idx").using("hnsw", table.embedding.op("vector_cosine_ops")),
+    index("lowongan_titik_idx").using("gist", table.titik),
   ],
 );
 
-export type ItemCv = { id: string; text: string; fakta_ids: string[]; diedit_pengguna?: boolean };
-export type BagianCv = { id: string; judul: string; items: ItemCv[] };
+/*
+ * Isi CV Khusus versi 2 (ADR 0009): terstruktur seperti CV LaTeX yang disukai perekrut.
+ * Setiap Entri (misalnya satu pekerjaan) punya judul, tempat, periode, dan poin; poin dan
+ * Entri menunjuk ke Fakta asalnya. Teks boleh memuat **tebal** untuk angka atau kata kunci.
+ */
+export type PoinCv = { id: string; text: string; fakta_ids: string[]; diedit_pengguna?: boolean };
+export type EntriCv = {
+  id: string;
+  /** Posisi, nama sekolah, atau nama proyek. */
+  judul: string;
+  /** Usaha, organisasi, atau jurusan. */
+  tempat?: string;
+  /** Catatan miring pendek, misalnya "paruh waktu". */
+  keterangan?: string;
+  periode?: string;
+  lokasi?: string;
+  poin: PoinCv[];
+  fakta_ids: string[];
+  diedit_pengguna?: boolean;
+};
+export type JenisBagianCv = "pengalaman" | "pendidikan" | "proyek" | "prestasi" | "lainnya";
+export type BagianCv = { id: string; judul: string; jenis: JenisBagianCv; entri: EntriCv[] };
+export type KelompokKeahlian = { id: string; label: string; isi: string[] };
 export type IsiCv = {
+  versi: 2;
+  nama: string;
+  judul: string;
+  kontak: { telepon?: string; email?: string; kota?: string; tautan?: string[] };
+  ringkasan: string;
+  keahlian: KelompokKeahlian[];
+  bagian: BagianCv[];
+};
+
+/** Bentuk lama sebelum ADR 0009; dibaca lewat normalisasiIsi di src/cv/isi.ts. */
+export type IsiCvLama = {
   nama: string;
   judul: string;
   kontak: { telepon?: string; email?: string; kota?: string };
   ringkasan: string;
   keahlian: string[];
-  bagian: BagianCv[];
+  bagian: { id: string; judul: string; items: PoinCv[] }[];
 };
 
 export const cvKhusus = pgTable("cv_khusus", {
@@ -188,8 +230,8 @@ export const cvKhusus = pgTable("cv_khusus", {
   lowonganId: uuid("lowongan_id").references(() => lowongan.id, { onDelete: "set null" }),
   template: text("template").$type<"satu_kolom" | "dua_kolom">().notNull().default("satu_kolom"),
   language: text("language").$type<"id" | "en">().notNull().default("id"),
-  isi: jsonb("isi").$type<IsiCv>().notNull(),
-  isiAwal: jsonb("isi_awal").$type<IsiCv>().notNull(),
+  isi: jsonb("isi").$type<IsiCv | IsiCvLama>().notNull(),
+  isiAwal: jsonb("isi_awal").$type<IsiCv | IsiCvLama>().notNull(),
   createdAt: createdAt(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
