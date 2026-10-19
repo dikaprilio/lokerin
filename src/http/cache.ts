@@ -29,10 +29,13 @@ export function pasangCacheHttp(app: FastifyInstance) {
   });
 }
 
-/** Mengingat hasil `muat` selama `ms`; permintaan yang datang bersamaan berbagi satu janji. */
+/**
+ * Mengingat hasil `muat` selama `ms`; permintaan yang datang bersamaan berbagi satu janji.
+ * `lupakan()` membuang hasil yang diingat, untuk dipanggil saat datanya pasti berubah.
+ */
 export function ingat<T>(ms: number, muat: () => Promise<T>) {
   let simpanan: { sampai: number; janji: Promise<T> } | null = null;
-  return () => {
+  const ambil = () => {
     const sekarang = Date.now();
     if (simpanan && simpanan.sampai > sekarang) return simpanan.janji;
     const janji = muat();
@@ -43,4 +46,9 @@ export function ingat<T>(ms: number, muat: () => Promise<T>) {
     });
     return janji;
   };
+  return Object.assign(ambil, {
+    lupakan: () => {
+      simpanan = null;
+    },
+  });
 }

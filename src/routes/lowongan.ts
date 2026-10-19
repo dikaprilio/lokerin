@@ -217,6 +217,8 @@ export async function lowonganRoutes(app: FastifyInstance, ctx: AppContext) {
     if (!row) throw new Error("Lowongan hilang setelah terbit");
     const published = kartuLowongan(row.lowongan, row.employer);
     const channels = [publicChannel, ...(row.lowongan.city ? [cityChannel(row.lowongan.city)] : [])];
+    // Penghitung di halaman utama memuat ulang statistik begitu menerima peristiwa ini.
+    statistik.lupakan();
     ctx.bus.publish(channels, { type: published.butuh_hari_ini ? "butuh_hari_ini" : "lowongan.baru", data: published });
     if (published.butuh_hari_ini) void kabarButuhHariIni(row.lowongan, row.employer);
     return published;
@@ -250,6 +252,7 @@ export async function lowonganRoutes(app: FastifyInstance, ctx: AppContext) {
       .where(and(eq(lowongan.id, id), eq(lowongan.employerId, employer.id)))
       .returning();
     if (!row) throw new HttpError(404, "lowongan_tidak_ada", "Lowongan tidak ditemukan.");
+    statistik.lupakan();
     ctx.bus.publish([publicChannel], { type: "lowongan.tutup", data: { id } });
     return kartuLowongan(row, employer);
   });
