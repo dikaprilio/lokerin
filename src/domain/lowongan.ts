@@ -68,10 +68,12 @@ function toColumns(isi: IsiDraf) {
 /**
  * Butuh Hari Ini tanpa kata "mendadak": draf yang mulai hari ini ditandai sampai jam kerjanya
  * (batasButuhHariIni). Batas yang disebut sendiri (urgentHours, juga dari formulir) selalu menang, dan
- * tanda yang masih berlaku tidak diubah. Undefined berarti kolomnya tidak disentuh.
+ * tanda yang masih berlaku tidak diubah. Hanya tanggal mulai yang baru atau berubah yang dihitung, jadi
+ * revisi yang mengirim ulang tanggal yang sama tidak memasang lagi tanda yang sudah dihapus.
+ * Undefined berarti kolomnya tidak disentuh.
  */
 function butuhHariIniDariMulai(isi: IsiDraf, sebelumnya?: typeof lowongan.$inferSelect) {
-  if (isi.urgentHours !== undefined || !isi.startDate) return undefined;
+  if (isi.urgentHours !== undefined || !isi.startDate || isi.startDate === sebelumnya?.startDate) return undefined;
   const sekarang = new Date();
   if (sebelumnya?.urgentUntil && sebelumnya.urgentUntil > sekarang) return undefined;
   return batasButuhHariIni(isi.startDate, isi.hoursText ?? sebelumnya?.hoursText, sekarang) ?? undefined;
