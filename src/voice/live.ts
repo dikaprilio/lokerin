@@ -123,6 +123,18 @@ export class LiveVoice {
     return { session_id: id, sdp: result.transport.sdp, thread_id: threadId };
   }
 
+  /**
+   * Kata yang diketuk atau diketik pengguna selama panggilan (jawaban pilihan, kotak ketik).
+   * Kanal data browser tidak boleh mengirim event ke sesi, jadi teksnya lewat sini: agen yang sama
+   * menjalankannya di obrolan yang sama, kartu muncul seperti biasa, dan jawabannya diserahkan ke
+   * suara untuk diucapkan.
+   */
+  teks(user: SessionUser, id: string, teks: string) {
+    const call = this.calls.get(id);
+    if (!call || call.user.id !== user.id) throw new HttpError(404, "panggilan_tidak_ada", "Panggilan tidak ditemukan.");
+    call.queue = call.queue.then(() => this.jalankan(call, teks, null)).catch(() => {});
+  }
+
   async close(user: SessionUser, id: string) {
     const call = this.calls.get(id);
     if (!call || call.user.id !== user.id) throw new HttpError(404, "panggilan_tidak_ada", "Panggilan tidak ditemukan.");
@@ -199,6 +211,15 @@ export class LiveVoice {
   private async delegate(call: ActiveCall, delegationId: string, offsetMs: number) {
     if (call.closed) return;
     const message = await this.takeUtterance(call, offsetMs);
+    await this.jalankan(call, message, delegationId);
+  }
+
+  /**
+   * Menjalankan agen untuk satu giliran. `delegationId` null untuk teks dari layar: hasilnya menjadi
+   * commentary umum yang diucapkan suara, bukan jawaban sebuah delegasi.
+   */
+  private async jalankan(call: ActiveCall, message: string, delegationId: string | null) {
+    if (call.closed) return;
     this.emit(call, "suara.tugas", { delegation_id: delegationId, pesan: message, status: "berjalan" });
     const requestContext = new RequestContext<LokerinRequestContext>();
     requestContext.set("user", call.user);
@@ -218,7 +239,12 @@ export class LiveVoice {
         }
       }
       this.emit(call, "suara.tugas", { delegation_id: delegationId, status: "selesai", jawaban: result.text });
-      this.append(call, delegationId, result.text || "Sudah, hasilnya ada di layar.");
+      const jawaban = result.text || "Sudah, hasilnya ada di layar.";
+      this.append(
+        call,
+        delegationId,
+        delegationId ? jawaban : `Sampaikan sekarang dengan singkat, untuk yang baru diketuk pengguna ("${message.slice(0, 80)}"): ${jawaban}`,
+      );
     } catch (error) {
       this.log.warn({ err: error, call: call.id }, "delegasi suara gagal");
       this.emit(call, "suara.tugas", { delegation_id: delegationId, status: "gagal" });
@@ -230,7 +256,7 @@ export class LiveVoice {
     }
   }
 
-  private append(call: ActiveCall, delegationId: string, content: string) {
+  private append(call: ActiveCall, delegationId: string | null, content: string) {
     if (call.closed) return;
     try {
       call.socket.send({
