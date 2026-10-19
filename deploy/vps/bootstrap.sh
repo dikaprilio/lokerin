@@ -17,8 +17,21 @@ SINI="$(cd "$(dirname "$0")" && pwd)"
 ADMIN="${SUDO_USER:-lokerin}"
 PG=18
 export DEBIAN_FRONTEND=noninteractive
+# Saat upgrade paket, needrestart hanya mendaftar layanan yang perlu restart, tidak me-restart sendiri.
+export NEEDRESTART_MODE=l
 
 langkah() { printf '\n== %s\n' "$*"; }
+# Tulis stdin ke $1 hanya bila isinya berbeda. Berhasil (0) bila berkas berubah, supaya layanan
+# hanya di-restart bila konfigurasinya benar-benar berubah. Menjalankan ulang skrip ini tidak
+# memutus API bila tidak ada yang berubah.
+pasang() {
+  local baru
+  baru="$(mktemp)"
+  cat > "$baru"
+  if [ -f "$1" ] && cmp -s "$baru" "$1"; then rm -f "$baru"; return 1; fi
+  install -m 644 "$baru" "$1"
+  rm -f "$baru"
+}
 
 langkah "Paket dasar"
 apt-get update -q
@@ -51,10 +64,10 @@ if ! command -v docker >/dev/null; then
   apt-get install -yq docker-ce docker-ce-cli containerd.io
 fi
 # Log container dibatasi agar disk 40 GB tidak penuh.
-cat > /etc/docker/daemon.json <<'EOF'
+if pasang /etc/docker/daemon.json <<'EOF'
 { "log-driver": "json-file", "log-opts": { "max-size": "20m", "max-file": "3" } }
 EOF
-systemctl restart docker
+then systemctl restart docker; fi
 
 langkah "Caddy"
 if ! command -v caddy >/dev/null; then
@@ -75,7 +88,7 @@ if [ ! -d "/usr/lib/postgresql/$PG" ]; then
   apt-get install -yq "postgresql-$PG" "postgresql-$PG-postgis-3" "postgresql-$PG-pgvector"
 fi
 # Hanya localhost: API memakai jaringan host, jadi tidak ada port Postgres yang terbuka.
-cat > "/etc/postgresql/$PG/main/conf.d/lokerin.conf" <<'EOF'
+if pasang "/etc/postgresql/$PG/main/conf.d/lokerin.conf" <<'EOF'
 listen_addresses = 'localhost'
 shared_buffers = 512MB
 effective_cache_size = 1536MB
@@ -83,7 +96,7 @@ work_mem = 8MB
 maintenance_work_mem = 128MB
 max_connections = 50
 EOF
-systemctl restart postgresql
+then systemctl restart postgresql; fi
 
 langkah "Berkas env backend"
 install -d -m 750 -o root -g root /etc/lokerin
