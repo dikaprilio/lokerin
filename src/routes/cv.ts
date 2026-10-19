@@ -6,34 +6,57 @@ import { cvKhusus, employers, lamaran, lowongan, type IsiCv } from "../db/schema
 import { HttpError, requireUser, type SessionUser } from "../auth/session.js";
 import { siapkanCvKhusus, simpanEditCv } from "../cv/generate.js";
 import { renderCvHtml } from "../cv/template.js";
+import { normalisasiIsi } from "../cv/isi.js";
 import { htmlToPdf } from "../cv/pdf.js";
 import { idParam, parse } from "./util.js";
 
+const teks = (max: number) => z.string().max(max);
+const idCv = z.string().max(64);
+const poinSchema = z.object({ id: idCv, text: teks(600), fakta_ids: z.array(z.string()).max(10), diedit_pengguna: z.boolean().optional() });
+
 const isiSchema: z.ZodType<IsiCv> = z.object({
-  nama: z.string().max(120),
-  judul: z.string().max(160),
-  kontak: z.object({ telepon: z.string().max(40).optional(), email: z.string().max(120).optional(), kota: z.string().max(80).optional() }),
-  ringkasan: z.string().max(2000),
-  keahlian: z.array(z.string().max(80)).max(30),
+  versi: z.literal(2),
+  nama: teks(120),
+  judul: teks(160),
+  kontak: z.object({
+    telepon: teks(40).optional(),
+    email: teks(120).optional(),
+    kota: teks(80).optional(),
+    tautan: z.array(teks(200)).max(5).optional(),
+  }),
+  ringkasan: teks(2000),
+  keahlian: z.array(z.object({ id: idCv, label: teks(60), isi: z.array(teks(80)).max(20) })).max(8),
   bagian: z
     .array(
       z.object({
-        id: z.string().max(64),
-        judul: z.string().max(80),
-        items: z
+        id: idCv,
+        judul: teks(80),
+        jenis: z.enum(["pengalaman", "pendidikan", "proyek", "prestasi", "lainnya"]),
+        entri: z
           .array(
             z.object({
-              id: z.string().max(64),
-              text: z.string().max(600),
-              fakta_ids: z.array(z.string()).max(10),
+              id: idCv,
+              judul: teks(160),
+              tempat: teks(160).optional(),
+              keterangan: teks(120).optional(),
+              periode: teks(60).optional(),
+              lokasi: teks(80).optional(),
+              poin: z.array(poinSchema).max(12),
+              fakta_ids: z.array(z.string()).max(20),
               diedit_pengguna: z.boolean().optional(),
             }),
           )
-          .max(30),
+          .max(20),
       }),
     )
     .max(12),
 });
+
+/** Nama berkas yang dikenali orang di folder Unduhan: "CV - Sari Wulandari - Juru Masak.pdf". */
+function namaBerkas(isi: IsiCv) {
+  const bersih = (v: string) => v.replace(/[\\/:*?"<>|\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+  return ["CV", bersih(isi.nama), bersih(isi.judul)].filter(Boolean).join(" - ") + ".pdf";
+}
 
 export async function cvRoutes(app: FastifyInstance, ctx: AppContext) {
   const { db } = ctx;
@@ -75,13 +98,14 @@ export async function cvRoutes(app: FastifyInstance, ctx: AppContext) {
   app.get("/cv/:id", async (request) => {
     const user = requireUser(request);
     const { cv, masked, owner } = await access(user, parse(idParam, request.params).id);
-    const isi = masked ? { ...cv.isi, kontak: { kota: cv.isi.kontak.kota } } : cv.isi;
+    const lengkap = normalisasiIsi(cv.isi);
+    const isi = masked ? { ...lengkap, kontak: { kota: lengkap.kontak.kota } } : lengkap;
     return {
       id: cv.id,
       template: cv.template,
       bahasa: cv.language,
       isi,
-      ...(owner ? { isi_awal: cv.isiAwal } : {}),
+      ...(owner ? { isi_awal: normalisasiIsi(cv.isiAwal) } : {}),
       kontak_disembunyikan: masked,
       peringatan: cv.template === "dua_kolom" ? "Templat dua kolom kurang ramah ATS." : null,
     };
@@ -99,23 +123,28 @@ export async function cvRoutes(app: FastifyInstance, ctx: AppContext) {
     const user = requireUser(request);
     const { cv, masked } = await access(user, parse(idParam, request.params).id);
     reply.type("text/html; charset=utf-8");
-    return renderCvHtml(cv.isi, cv.template, masked, cv.language);
+    return renderCvHtml(normalisasiIsi(cv.isi), cv.template, masked, cv.language);
   });
 
+  /** `?unduh=1` meminta berkas diunduh; tanpa itu PDF dibuka di tab browser. */
   app.get("/cv/:id/pdf", async (request, reply) => {
     const user = requireUser(request);
     const { cv, masked } = await access(user, parse(idParam, request.params).id);
+    const { unduh } = parse(z.object({ unduh: z.string().optional() }), request.query ?? {});
+    const isi = normalisasiIsi(cv.isi);
     let pdf: Uint8Array;
     try {
-      pdf = await htmlToPdf(renderCvHtml(cv.isi, cv.template, masked, cv.language), ctx.env.CHROMIUM_PATH);
+      pdf = await htmlToPdf(renderCvHtml(isi, cv.template, masked, cv.language), ctx.env.CHROMIUM_PATH);
     } catch (error) {
       request.log.error({ err: error }, "render PDF gagal");
       throw new HttpError(503, "pdf_gagal", "PDF belum bisa dibuat. Pakai tombol Cetak di browser sebagai cadangan.");
     }
-    const safeName = cv.isi.nama.replace(/[^a-z0-9]+/gi, "_").slice(0, 40) || "CV";
+    const nama = namaBerkas(isi);
+    const ascii = nama.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "");
     reply
       .type("application/pdf")
-      .header("Content-Disposition", `inline; filename="CV_${safeName}.pdf"`)
+      .header("Content-Disposition", `${unduh ? "attachment" : "inline"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(nama)}`)
+      .header("Access-Control-Expose-Headers", "Content-Disposition")
       .header("Cache-Control", "private, no-store");
     return Buffer.from(pdf);
   });

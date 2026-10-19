@@ -168,15 +168,47 @@ export const lowongan = pgTable(
   ],
 );
 
-export type ItemCv = { id: string; text: string; fakta_ids: string[]; diedit_pengguna?: boolean };
-export type BagianCv = { id: string; judul: string; items: ItemCv[] };
+/*
+ * Isi CV Khusus versi 2 (ADR 0009): terstruktur seperti CV LaTeX yang disukai perekrut.
+ * Setiap Entri (misalnya satu pekerjaan) punya judul, tempat, periode, dan poin; poin dan
+ * Entri menunjuk ke Fakta asalnya. Teks boleh memuat **tebal** untuk angka atau kata kunci.
+ */
+export type PoinCv = { id: string; text: string; fakta_ids: string[]; diedit_pengguna?: boolean };
+export type EntriCv = {
+  id: string;
+  /** Posisi, nama sekolah, atau nama proyek. */
+  judul: string;
+  /** Usaha, organisasi, atau jurusan. */
+  tempat?: string;
+  /** Catatan miring pendek, misalnya "paruh waktu". */
+  keterangan?: string;
+  periode?: string;
+  lokasi?: string;
+  poin: PoinCv[];
+  fakta_ids: string[];
+  diedit_pengguna?: boolean;
+};
+export type JenisBagianCv = "pengalaman" | "pendidikan" | "proyek" | "prestasi" | "lainnya";
+export type BagianCv = { id: string; judul: string; jenis: JenisBagianCv; entri: EntriCv[] };
+export type KelompokKeahlian = { id: string; label: string; isi: string[] };
 export type IsiCv = {
+  versi: 2;
+  nama: string;
+  judul: string;
+  kontak: { telepon?: string; email?: string; kota?: string; tautan?: string[] };
+  ringkasan: string;
+  keahlian: KelompokKeahlian[];
+  bagian: BagianCv[];
+};
+
+/** Bentuk lama sebelum ADR 0009; dibaca lewat normalisasiIsi di src/cv/isi.ts. */
+export type IsiCvLama = {
   nama: string;
   judul: string;
   kontak: { telepon?: string; email?: string; kota?: string };
   ringkasan: string;
   keahlian: string[];
-  bagian: BagianCv[];
+  bagian: { id: string; judul: string; items: PoinCv[] }[];
 };
 
 export const cvKhusus = pgTable("cv_khusus", {
@@ -188,8 +220,8 @@ export const cvKhusus = pgTable("cv_khusus", {
   lowonganId: uuid("lowongan_id").references(() => lowongan.id, { onDelete: "set null" }),
   template: text("template").$type<"satu_kolom" | "dua_kolom">().notNull().default("satu_kolom"),
   language: text("language").$type<"id" | "en">().notNull().default("id"),
-  isi: jsonb("isi").$type<IsiCv>().notNull(),
-  isiAwal: jsonb("isi_awal").$type<IsiCv>().notNull(),
+  isi: jsonb("isi").$type<IsiCv | IsiCvLama>().notNull(),
+  isiAwal: jsonb("isi_awal").$type<IsiCv | IsiCvLama>().notNull(),
   createdAt: createdAt(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
