@@ -143,6 +143,18 @@ echo "command=\"/usr/local/bin/lokerin-deploy\",restrict $KUNCI_DEPLOY" > /home/
 chown deploy:deploy /home/deploy/.ssh/authorized_keys
 chmod 600 /home/deploy/.ssh/authorized_keys
 
+langkah "Akses tim"
+# lokerin-ssh: boleh login SSH. lokerin-admin: sudo tanpa sandi (login tetap hanya dengan kunci).
+# Anggota baru: sudo lokerin-tambah-admin <nama> "<kunci publik>".
+getent group lokerin-ssh >/dev/null || groupadd lokerin-ssh
+getent group lokerin-admin >/dev/null || groupadd lokerin-admin
+usermod -aG lokerin-ssh,lokerin-admin "$ADMIN"
+usermod -aG lokerin-ssh deploy
+echo '%lokerin-admin ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/lokerin-admin
+chmod 440 /etc/sudoers.d/lokerin-admin
+visudo -cq
+install -m 755 -o root -g root "$SINI/tambah-admin.sh" /usr/local/bin/lokerin-tambah-admin
+
 langkah "SSH: hanya kunci, tanpa root"
 [ -s "/home/$ADMIN/.ssh/authorized_keys" ] || { echo "$ADMIN belum punya authorized_keys, SSH tidak diubah agar tidak terkunci" >&2; exit 1; }
 # Nama 00- supaya menang dari 50-cloud-init.conf (sshd memakai nilai pertama yang ditemukan).
@@ -150,7 +162,7 @@ cat > /etc/ssh/sshd_config.d/00-lokerin.conf <<EOF
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
-AllowUsers $ADMIN deploy
+AllowGroups lokerin-ssh
 MaxAuthTries 3
 X11Forwarding no
 EOF
