@@ -1,0 +1,16 @@
+# /etc/caddy/Caddyfile
+# Caddy mengurus sertifikat HTTPS sendiri (Let's Encrypt) begitu DNS api.lokerin.site
+# menunjuk ke VPS ini.
+api.lokerin.site {
+	reverse_proxy 127.0.0.1:3120 {
+		# SSE (/events) dan stream obrolan dikirim apa adanya, tanpa buffer.
+		flush_interval -1
+	}
+	header -Server
+	log {
+		output file /var/log/caddy/api.log {
+			roll_size 20MiB
+			roll_keep 5
+		}
+	}
+}

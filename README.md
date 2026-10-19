@@ -66,11 +66,48 @@ Kabar adalah pemberitahuan yang disimpan ([ADR 0008](https://github.com/al-diooo
 - Kontak Pencari Kerja tersembunyi dari Pemberi Kerja sampai Lamaran Lolos, termasuk di PDF CV.
 - Pemeriksaan menahan Lowongan yang field wajibnya kosong atau meminta biaya dari pelamar, dan memberi Peringatan Upah dibanding UMK Banyumas.
 
-## Deploy ke Azure App Service
+## Deploy ke VPS IDCloudHost
 
-Workflow `.github/workflows/deploy.yml` membangun image dari `Dockerfile` (berbasis image Playwright agar Chromium tersedia), mendorongnya ke ACR, lalu memperbarui App Service.
+API dan database berjalan di satu VPS IDCloudHost (Jakarta, 2 vCPU / 4 GB / 40 GB, Ubuntu 24.04), supaya query dari API ke Postgres tidak menyeberang jaringan.
 
-1. Buat App Service Linux B1 di Southeast Asia (container), ACR Basic, dan federated credential GitHub untuk OIDC.
-2. Secrets repo: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`. Variables: `ACR_NAME`, `AZURE_WEBAPP_NAME`.
-3. Pengaturan App Service: Always On aktif, HTTPS only, session affinity mati, health check `/healthz`, `WEBSITES_PORT=8080`, `WEBSITES_CONTAINER_START_TIME_LIMIT=600`, plus semua variabel dari `.env.example`.
-4. Jangan deploy atau mengubah pengaturan saat penjurian: restart memutus panggilan suara.
+- **API**: container Docker `lokerin-backend.service`, hanya di `127.0.0.1:3120`. Caddy membuka `https://api.lokerin.site` dan mengurus sertifikatnya sendiri.
+- **Database**: Postgres 18 + PostGIS + pgvector, hanya mendengar localhost. Backup `pg_dump` setiap hari pukul 03.15 WIB ke `/var/backups/lokerin`, disimpan 14 hari.
+- **Rahasia**: `.env` produksi ada di `/etc/lokerin/backend.env` (root:deploy, 640). Tidak pernah di-commit dan tidak lewat GitHub.
+
+### Alur CI/CD
+
+`.github/workflows/deploy.yml`:
+
+1. Setiap PR: typecheck, build, dan build image Docker tanpa push.
+2. Push ke `main`: image didorong ke `ghcr.io/dikaprilio/lokerin-backend:<sha>`, lalu job `deploy` SSH ke VPS sebagai user `deploy`.
+3. Di server, `lokerin-deploy` menarik image itu, menjalankan migrasi, mengganti `lokerin-backend:current`, restart, dan cek `/healthz`. Bila gagal, image sebelumnya dipasang lagi otomatis.
+4. Rollback manual: Actions → CI/CD backend → Run workflow → `rollback`. Migrasi tidak ikut dibatalkan, jadi migrasi harus tetap cocok dengan kode versi sebelumnya (tambah kolom dulu, hapus belakangan).
+
+### Prinsip SSH
+
+- Login hanya dengan kunci. Password SSH dan login root dimatikan, hanya user admin dan `deploy` yang boleh masuk. Ada juga ufw (22, 80, 443) dan fail2ban.
+- Kunci CI adalah kunci khusus yang tidak dipakai di tempat lain. Di `authorized_keys` milik `deploy` kunci itu diawali `command="/usr/local/bin/lokerin-deploy",restrict`: tanpa shell, tanpa port forwarding, dan hanya bisa `deploy <sha>`, `rollback`, atau `status`.
+- `lokerin-deploy` milik root, jadi user `deploy` tidak bisa mengubah perintah yang dijalankan kuncinya. Sudo untuk `deploy` hanya `systemctl restart/stop lokerin-backend` dan `journalctl` unit itu.
+- Kunci host server disematkan di workflow (`DEPLOY_KNOWN_HOST`), jadi CI menolak bila yang menjawab bukan server ini.
+- Token GHCR untuk pull adalah `GITHUB_TOKEN` milik job. Token ini dikirim lewat stdin, berlaku selama job saja, dan langsung di-logout setelah pull.
+
+### Pemasangan sekali
+
+```bash
+scp -r deploy/vps lokerin@<ip>:/tmp/lokerin-vps
+ssh -t lokerin@<ip> sudo bash /tmp/lokerin-vps/bootstrap.sh "$(cat ~/.ssh/lokerin_deploy.pub)"
+```
+
+Lalu lengkapi `/etc/lokerin/backend.env` dari `.env.example`. `DATABASE_URL`, `SESSION_SECRET`, dan origin sudah diisi skrip. Isi secret repo `DEPLOY_SSH_KEY` dengan kunci privat `lokerin_deploy`, lalu ganti `DEPLOY_HOST` dan `DEPLOY_KNOWN_HOST` di workflow (`ssh-keyscan -t ed25519 <ip>`).
+
+Perubahan di `deploy/vps/*` baru berlaku setelah `bootstrap.sh` dijalankan ulang. Skrip ini aman diulang dan tidak menimpa `backend.env`.
+
+### Perintah harian
+
+```bash
+ssh deploy@api.lokerin.site status            # image yang berjalan + /healthz
+ssh lokerin@api.lokerin.site journalctl -u lokerin-backend -f
+ssh lokerin@api.lokerin.site sudo -u postgres psql lokerin
+```
+
+Jangan deploy atau mengubah pengaturan saat penjurian: restart memutus panggilan suara.
