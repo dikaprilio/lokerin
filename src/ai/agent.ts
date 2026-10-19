@@ -39,6 +39,12 @@ const PEMBERI = `Pengguna ini Pemberi Kerja.
 
 const SUARA = `Saat ini percakapan lewat suara: jawab maksimal dua kalimat pendek tanpa daftar atau simbol.`;
 
+const TEKS = `Saat ini percakapan lewat teks di layar HP, dibaca juga oleh orang tua dan yang membaca pelan.
+- Jawab paling banyak 3 kalimat pendek (sekitar 50 kata). Satu gagasan per kalimat.
+- Rincian sudah tampil di kartu, jadi jangan mengulang daftar lowongan, upah, alamat, atau isi CV. Cukup sebut yang paling penting dan apa langkah berikutnya.
+- Tanpa judul, tabel, atau daftar bertingkat. Daftar pendek boleh bila benar-benar perlu, maksimal 3 butir.
+- **Tebal** paling banyak untuk 2 hal penting.`;
+
 /** Instruksi agen per permintaan; dipakai juga oleh `pnpm eval:agen`. */
 export function instruksiAgen({ requestContext }: { requestContext: RequestContext<LokerinRequestContext> }) {
   const user = requestContext.get("user");
@@ -51,7 +57,7 @@ export function instruksiAgen({ requestContext }: { requestContext: RequestConte
     year: "numeric",
   }).format(new Date());
   const tanggal = `Hari ini ${hariIni} (WIB). Ubah tanggal relatif seperti "besok" atau "minggu depan" menjadi tanggal YYYY-MM-DD; untuk "minggu depan" pakai Senin minggu depan.`;
-  return [UMUM, tanggal, user?.role === "pemberi" ? PEMBERI : PENCARI, kanal === "suara" ? SUARA : ""].join("\n\n");
+  return [UMUM, tanggal, user?.role === "pemberi" ? PEMBERI : PENCARI, kanal === "suara" ? SUARA : TEKS].join("\n\n");
 }
 
 export function createMastra(db: Db, pool: pg.Pool, models: Models, deps: AlatDeps) {
