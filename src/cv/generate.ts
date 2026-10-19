@@ -25,7 +25,9 @@ const draftSchema = z.object({
       z.object({
         label: z
           .string()
-          .describe("Nama bidang, bukan nama alat: misalnya 'Dapur', 'Kasir & Toko', 'Desain', 'Riset Pengguna', 'Alat', 'Bahasa'"),
+          .describe(
+            "Nama bidang, bukan nama alat. Benar: {label:'Desain', isi:['Figma','Wireframe']}. Salah: {label:'Figma', isi:[...]}. Contoh label: Dapur, Kasir & Toko, Desain, Riset Pengguna, Alat, Bahasa",
+          ),
         isi: z.array(z.string()).describe("Keahlian dalam kelompok ini, dari Fakta"),
       }),
     )
@@ -33,7 +35,7 @@ const draftSchema = z.object({
   bagian: z.array(
     z.object({
       jenis: z.enum(["pengalaman", "pendidikan", "proyek", "prestasi", "lainnya"]),
-      judul: z.string().describe("Nama bagian, misalnya Pengalaman, Pendidikan, Proyek, Prestasi"),
+      judul: z.string().describe("Nama jenis bagian (Pengalaman, Pendidikan, Proyek, Prestasi), bukan nama entri"),
       entri: z.array(
         z.object({
           judul: z.string().describe("Posisi, nama sekolah, atau nama proyek, persis dari judul Fakta"),
@@ -108,7 +110,18 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
   const { user, persona, target } = sumber;
   const bahasa = target.lowongan.language;
   const daftarFakta = sumber.fakta
-    .map((item) => `- [${item.id}] (${item.kind}) ${item.title}${item.place ? ` di ${item.place}` : ""}${item.period ? `, ${item.period}` : ""}${item.detail ? `: ${item.detail}` : ""}`)
+    .map((item) =>
+      [
+        `- id: ${item.id}`,
+        `  jenis: ${item.kind}`,
+        `  judul: ${item.title}`,
+        item.place ? `  tempat: ${item.place}` : null,
+        item.period ? `  periode: ${item.period}` : null,
+        item.detail ? `  detail: ${item.detail}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    )
     .join("\n");
   const cvSekarang = revisi
     ? [
@@ -155,7 +168,12 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
 
   const sah = new Set(sumber.fakta.map((item) => item.id));
   // Models sometimes echo "[<uuid>]" into the text; it never belongs on a CV.
-  const rapikan = (teks: string) => teks.replace(/\s*[[(][0-9a-f]{8}-[0-9a-f-]{27,}[\])]/gi, "").replace(/\s{2,}/g, " ").trim();
+  const rapikan = (teks: string) =>
+    teks
+      .replace(/\s*[[(][0-9a-f]{8}-[0-9a-f-]{27,}[\])]/gi, "")
+      .replace(/^\s*(?:[>\-*•]+\s*)+/, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
   const saring = (ids: string[]) => ids.filter((faktaId) => sah.has(faktaId));
   let dibuang = 0;
   const bagian: BagianCv[] = object.bagian
@@ -173,7 +191,8 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
         .map((entri) => ({
           id: randomUUID(),
           judul: rapikan(entri.judul),
-          ...(entri.tempat?.trim() ? { tempat: rapikan(entri.tempat) } : {}),
+          // "Freelance, Freelance": a place that repeats the title adds nothing.
+          ...(entri.tempat?.trim() && rapikan(entri.tempat).toLowerCase() !== rapikan(entri.judul).toLowerCase() ? { tempat: rapikan(entri.tempat) } : {}),
           ...(entri.keterangan?.trim() ? { keterangan: entri.keterangan.trim() } : {}),
           ...(entri.periode?.trim() ? { periode: entri.periode.trim() } : {}),
           ...(entri.lokasi?.trim() ? { lokasi: entri.lokasi.trim() } : {}),
@@ -190,6 +209,23 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
     }))
     .filter((section) => section.entri.length > 0);
 
+  // Section titles follow the language the model actually wrote in, so headings never disagree with the text.
+  const contoh = ` ${object.ringkasan} ${bagian.flatMap((b) => b.entri.flatMap((e) => e.poin.map((p) => p.text))).join(" ")} `.toLowerCase();
+  const hitung = (kata: string[]) => kata.reduce((n, k) => n + (contoh.split(` ${k} `).length - 1), 0);
+  const bahasaTulisan: "id" | "en" = hitung(["dan", "dengan", "yang", "untuk", "di", "dari"]) >= hitung(["and", "with", "the", "for", "in", "of"]) ? "id" : "en";
+  // One section per kind, with a fixed title, however the model split them.
+  const JUDUL: Record<"id" | "en", Record<BagianCv["jenis"], string>> = {
+    id: { pengalaman: "Pengalaman", pendidikan: "Pendidikan", proyek: "Proyek", prestasi: "Prestasi", lainnya: "Lainnya" },
+    en: { pengalaman: "Experience", pendidikan: "Education", proyek: "Projects", prestasi: "Awards", lainnya: "Other" },
+  };
+  const perJenis = new Map<BagianCv["jenis"], BagianCv>();
+  for (const section of bagian) {
+    const ada = perJenis.get(section.jenis);
+    if (ada) ada.entri.push(...section.entri);
+    else perJenis.set(section.jenis, { ...section, judul: JUDUL[bahasaTulisan][section.jenis] });
+  }
+  const bagianRapi = [...perJenis.values()];
+
   const isi: IsiCv = {
     versi: 2,
     nama: user.name,
@@ -200,9 +236,9 @@ async function susunIsi(models: Models, sumber: Sumber, revisi?: { instruksi: st
       .map((k) => ({ id: randomUUID(), label: rapikan(k.label), isi: k.isi.map(rapikan).filter(Boolean).slice(0, 10) }))
       .filter((k) => k.label && k.isi.length)
       .slice(0, 4),
-    bagian,
+    bagian: bagianRapi,
   };
-  const faktaDipakai = new Set(bagian.flatMap((section) => section.entri.flatMap((entri) => [...entri.fakta_ids, ...entri.poin.flatMap((poin) => poin.fakta_ids)]))).size;
+  const faktaDipakai = new Set(bagianRapi.flatMap((section) => section.entri.flatMap((entri) => [...entri.fakta_ids, ...entri.poin.flatMap((poin) => poin.fakta_ids)]))).size;
   return { isi, bahasa, dibuang, faktaDipakai };
 }
 
